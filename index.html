@@ -2073,724 +2073,683 @@ function printReporteFinal(){
 }
 
 // ---- SETTINGS TAB ----
+// ════════════════════════════════════════════════════════════════════
+// MÓDULO DE SINCRONIZACIÓN — Versión Optimizada
+// Estructura:
+//   1. renderSettingsTab()     → Pestaña principal de Ajustes
+//   2. Gestión de Datos        → exportData / importData / saveAll
+//   3. Sincronización QR       → Generación y escaneo bidireccional
+//   4. Lógica de fusión        → _aplicarSincDia / importarSincDia
+// ════════════════════════════════════════════════════════════════════
+
 function renderSettingsTab(container) {
-  const g = currentGroup();
+  // ── Estado de hoy para mostrar en la sección QR ─────────────────
+  const hoy = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-  container.innerHTML = `<div style="display:flex;flex-direction:column;gap:18px">
+  container.innerHTML = `
+  <div style="display:flex;flex-direction:column;gap:20px">
 
-  <!-- ══ SINCRONIZACIÓN TABLETA ↔ LAPTOP ══════════════════════════════ -->
-  <div style="background:white;border:2px solid #2a4a7a;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(42,74,122,0.12)">
-    <div style="background:linear-gradient(135deg,#1a1a2e 0%,#2a3a5a 100%);padding:14px 20px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.5rem">📱↔️💻</span>
-      <div style="flex:1">
-        <div style="font-family:'DM Serif Display',serif;font-size:1.05rem;color:white">Sincronización Tableta ↔ Laptop</div>
-        <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:2px">Transfiere datos capturados en la tableta sin perder nada · Sin internet requerido</div>
-      </div>
-    </div>
-
-    <!-- Tabs internos de sincronización -->
-    <div style="display:flex;border-bottom:2px solid #e8e4dc;background:#fafaf8">
-      <button id="syncTab_qr" onclick="switchSyncTab('qr')" style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;color:#2a4a7a;border-bottom:2px solid #2a4a7a;margin-bottom:-2px;display:flex;align-items:center;justify-content:center;gap:5px">📤 Exportar por QR</button>
-      <button id="syncTab_import" onclick="switchSyncTab('import')" style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;color:#999;border-bottom:2px solid transparent;margin-bottom:-2px;display:flex;align-items:center;justify-content:center;gap:5px">📥 Importar / Fusionar</button>
-      <button id="syncTab_howto" onclick="switchSyncTab('howto')" style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;color:#999;border-bottom:2px solid transparent;margin-bottom:-2px;display:flex;align-items:center;justify-content:center;gap:5px">❓ ¿Cómo funciona?</button>
-    </div>
-
-    <div id="syncTabContent" style="padding:18px 20px">
-      <!-- Contenido dinámico -->
-    </div>
-  </div>
-
-  <!-- ══ COPIA DE SEGURIDAD ════════════════════════════════════════════ -->
-  <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
-    <div style="background:var(--ink);padding:12px 20px;display:flex;align-items:center;gap:10px">
-      <span style="font-size:1.2rem">🗄️</span>
-      <div>
-        <div style="font-family:'DM Serif Display',serif;font-size:1rem;color:white">Copia de seguridad</div>
-        <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:1px">Exporta o importa todos tus datos en formato JSON</div>
-      </div>
-    </div>
-    <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button onclick="exportData()" style="padding:8px 18px;background:var(--ink);color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">⬆️ Exportar JSON</button>
-      <label style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">⬇️ Importar JSON<input type="file" accept=".json" style="display:none" onchange="importData(event)"></label>
-      <span style="font-size:0.7rem;color:#aaa">Útil para respaldo o cambio de dispositivo</span>
-    </div>
-  </div>
-
-  <!-- ══ SINCRONIZACIÓN DIARIA ════════════════════════════════════════ -->
-  <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
-    <div style="background:linear-gradient(135deg,#1a3a5a,#2a5a8a);padding:12px 20px;display:flex;align-items:center;gap:10px">
-      <span style="font-size:1.2rem">🔄</span>
-      <div style="flex:1">
-        <div style="font-family:'DM Serif Display',serif;font-size:1rem;color:white">Sincronización Diaria</div>
-        <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:1px">Tableta → Laptop · Solo cambios de hoy · Sin WiFi requerido</div>
-      </div>
-      <div style="background:rgba(255,255,255,0.15);border-radius:20px;padding:3px 10px;font-size:0.7rem;color:rgba(255,255,255,0.8);font-weight:700" id="syncDayBadge">Hoy: ${new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'})}</div>
-    </div>
-
-    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
-
-      <!-- Info de cambios de hoy -->
-      <div id="syncDayInfo" style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:8px;padding:12px 16px;font-size:0.82rem;color:#1a2a5a">
-        <div style="font-weight:700;margin-bottom:4px">📊 Calculando cambios de hoy...</div>
-      </div>
-
-      <!-- Dos métodos -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-
-        <!-- Método A: JSON pequeño -->
-        <div style="border:1.5px solid #c0d8c0;border-radius:10px;padding:14px;background:#f8fff8">
-          <div style="font-weight:700;font-size:0.88rem;color:#1a4a1a;margin-bottom:4px">📄 Método A — Archivo</div>
-          <div style="font-size:0.72rem;color:#555;margin-bottom:10px;line-height:1.4">Genera un JSON pequeño solo con los cambios de hoy. Mándalo por WhatsApp a ti mismo o pásalo por USB.</div>
-          <button onclick="exportarSincDia()" style="width:100%;padding:8px;background:#2a7a4b;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">⬇️ Exportar cambios de hoy</button>
-        </div>
-
-        <!-- Método B: QR -->
-        <div style="border:1.5px solid #c0c8e0;border-radius:10px;padding:14px;background:#f8f9ff">
-          <div style="font-weight:700;font-size:0.88rem;color:#1a1a4a;margin-bottom:4px">📷 Método B — QR</div>
-          <div style="font-size:0.72rem;color:#555;margin-bottom:10px;line-height:1.4">Muestra QRs en pantalla. Escanéalos desde la laptop con la cámara. Ideal si no hay cable ni WhatsApp.</div>
-          <button onclick="mostrarQRSincDia()" style="width:100%;padding:8px;background:#2a4a8a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ver QRs de hoy</button>
+    <!-- ══ 1. GESTIÓN DE DATOS (JSON) ══════════════════════════════ -->
+    <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
+      <div style="background:var(--ink);padding:13px 20px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.2rem">🗄️</span>
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:1rem;color:white">Gestión de Datos (JSON)</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:1px">Exporta/importa todos tus datos · Los cambios se guardan localmente con el botón 💾 Guardar</div>
         </div>
       </div>
+      <div style="padding:16px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <!-- Exportar: guarda localmente Y descarga el archivo -->
+        <button onclick="exportarYGuardar()"
+          style="padding:9px 20px;background:var(--ink);color:white;border:none;border-radius:7px;
+                 font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+          💾 Exportar JSON
+        </button>
+        <!-- Importar archivo JSON -->
+        <label style="padding:9px 20px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);
+                      border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;
+                      display:flex;align-items:center;gap:6px">
+          📂 Importar JSON
+          <input type="file" accept=".json" style="display:none" onchange="importData(event)">
+        </label>
+        <span style="font-size:0.72rem;color:#aaa">Útil para respaldo completo o cambio de dispositivo</span>
+      </div>
+    </div>
 
-      <!-- Importar en laptop -->
-      <div style="border:1.5px solid #e0d0c0;border-radius:10px;padding:14px;background:#fffaf5">
-        <div style="font-weight:700;font-size:0.88rem;color:#4a2a00;margin-bottom:6px">📥 Recibir en la laptop</div>
-
-        <!-- Tabs: Cámara QR | Archivo JSON -->
-        <div style="display:flex;gap:6px;margin-bottom:12px">
-          <button id="btnSincCam" onclick="setSincImportMode('cam')" style="flex:1;padding:7px;border-radius:6px;border:2px solid #2a4a8a;background:#2a4a8a;color:white;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">📷 Escanear QR con cámara</button>
-          <button id="btnSincFile" onclick="setSincImportMode('file')" style="flex:1;padding:7px;border-radius:6px;border:2px solid var(--border);background:var(--cream);color:var(--ink);font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer">📂 Subir archivo JSON</button>
-        </div>
-
-        <!-- Modo cámara -->
-        <div id="sincImportCam">
-          <div style="font-size:0.72rem;color:#555;margin-bottom:8px;line-height:1.4">
-            Toca <strong>Iniciar cámara</strong>, apunta al QR que muestra tu tableta. Cuando detecte todos los QRs los datos se fusionan automáticamente. ✅
+    <!-- ══ 2. SINCRONIZACIÓN POR CÓDIGO QR ══════════════════════════ -->
+    <div style="background:white;border:2px solid #2a4a7a;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(42,74,122,0.12)">
+      <div style="background:linear-gradient(135deg,#1a1a2e 0%,#2a3a5a 100%);padding:14px 20px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:1.5rem">📷</span>
+        <div style="flex:1">
+          <div style="font-family:'DM Serif Display',serif;font-size:1.05rem;color:white">Sincronización por Código QR</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:2px">
+            Transfiere calificaciones entre Tableta y Laptop · Sin internet · Sin cables
           </div>
-          <button onclick="iniciarSincScanner()" id="btnIniciarSincCam" style="padding:8px 18px;background:#2a4a8a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;margin-bottom:8px">▶ Iniciar cámara</button>
-          <button onclick="detenerSincScanner()" id="btnDetenerSincCam" style="display:none;padding:8px 16px;background:#888;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;margin-bottom:8px">⏹ Detener</button>
-
-          <div id="sincScannerWrap" style="display:none;position:relative;border-radius:10px;overflow:hidden;border:2px solid #2a4a8a;max-width:400px;margin-bottom:8px">
-            <video id="sincScanVideo" autoplay playsinline muted style="width:100%;display:block"></video>
-            <canvas id="sincScanCanvas" style="display:none"></canvas>
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
-              <div id="sincScanBox" style="width:220px;height:220px;border:3px solid #2a4a8a;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);transition:border-color 0.2s"></div>
-            </div>
-          </div>
-
-          <!-- Progreso de chunks -->
-          <div id="sincScanProgress" style="display:none;background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:8px;padding:10px 14px;font-size:0.82rem;margin-bottom:6px">
-            <div style="font-weight:700;color:#1a2a5a;margin-bottom:4px" id="sincScanProgressTitle">Escaneando QRs...</div>
-            <div id="sincScanProgressBar" style="background:#e0e8ff;border-radius:4px;height:8px;margin-bottom:6px">
-              <div id="sincScanProgressFill" style="background:#2a4a8a;height:8px;border-radius:4px;width:0%;transition:width 0.3s"></div>
-            </div>
-            <div id="sincScanProgressDetail" style="font-size:0.75rem;color:#555"></div>
-          </div>
-
-          <div id="sincScanFeedback" style="min-height:20px;font-size:0.82rem"></div>
         </div>
-
-        <!-- Modo archivo -->
-        <div id="sincImportFile" style="display:none">
-          <div style="font-size:0.72rem;color:#555;margin-bottom:8px;line-height:1.4">Exporta el archivo desde la tableta y ábrelo aquí. Los cambios se fusionan sin borrar nada.</div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <div style="flex:1;padding:8px 14px;background:#f5f0e8;border:1.5px solid var(--border);border-radius:6px;font-size:0.8rem;color:#888" id="sincImportLabel">Seleccionar archivo sync_*.json...</div>
-            <input type="file" accept=".json" style="display:none" onchange="importarSincDia(this)">
-            <button onclick="this.previousElementSibling.previousElementSibling.nextElementSibling.click()" style="padding:8px 16px;background:#b85c00;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">📂 Abrir</button>
-          </label>
+        <div style="background:rgba(255,255,255,0.15);border-radius:20px;padding:3px 10px;font-size:0.7rem;color:rgba(255,255,255,0.8);font-weight:700">
+          Hoy: ${hoy}
         </div>
       </div>
 
-    </div>
-  </div>
+      <!-- Sub-tabs: Enviar (Tableta→QR) | Recibir (Laptop←QR) -->
+      <div style="display:flex;border-bottom:2px solid #e8e4dc;background:#fafaf8">
+        <button id="qrTab_enviar" onclick="switchQRTab('enviar')"
+          style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;
+                 font-weight:700;cursor:pointer;color:#2a4a7a;border-bottom:3px solid #2a4a7a;margin-bottom:-2px;
+                 display:flex;align-items:center;justify-content:center;gap:6px">
+          📤 Mostrar QR <span style="font-size:0.7rem;opacity:0.7">(Tableta)</span>
+        </button>
+        <button id="qrTab_recibir" onclick="switchQRTab('recibir')"
+          style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;
+                 font-weight:600;cursor:pointer;color:#999;border-bottom:3px solid transparent;margin-bottom:-2px;
+                 display:flex;align-items:center;justify-content:center;gap:6px">
+          📥 Escanear QR <span style="font-size:0.7rem;opacity:0.7">(Laptop)</span>
+        </button>
+      </div>
 
-  <!-- ══ ZONA DE PELIGRO ══════════════════════════════════════════════ -->
-  <div class="danger-zone">
-    <h3>⚠️ Zona de Peligro</h3>
-    <div class="danger-row"><div><strong>Borrar todas las calificaciones</strong><div class="danger-desc">Mantiene alumnos y actividades.</div></div><button class="btn btn-danger" onclick="clearGradesConfirm()">Borrar Calificaciones</button></div>
-    <div class="danger-row"><div><strong>Borrar todos los registros de conducta</strong><div class="danger-desc">Elimina conductas e incidentes.</div></div><button class="btn btn-danger" onclick="clearConductConfirm()">Borrar Conducta</button></div>
-    <div class="danger-row"><div><strong>Borrar todos los estados de tareas</strong><div class="danger-desc">Elimina entregados, pendientes y notas.</div></div><button class="btn btn-danger" onclick="clearHWConfirm()">Borrar Tareas</button></div>
-    <div class="danger-row"><div><strong>Borrar todas las actividades</strong><div class="danger-desc">Elimina actividades, calificaciones y tareas.</div></div><button class="btn btn-danger" onclick="clearActivitiesConfirm()">Borrar Actividades</button></div>
-    <div class="danger-row"><div><strong>Borrar todos los alumnos</strong><div class="danger-desc">Elimina alumnos y todos sus datos.</div></div><button class="btn btn-danger" onclick="clearStudentsConfirm()">Borrar Alumnos</button></div>
-    <div class="danger-row"><div><strong>Reiniciar grupo completo</strong><div class="danger-desc">Borra absolutamente todo del grupo.</div></div><button class="btn btn-danger" onclick="clearGroupConfirm()">Reiniciar Grupo</button></div>
-    <div class="danger-row" style="border-top:2px dashed #ffcccc;margin-top:8px;padding-top:16px"><div><strong>Restablecer datos de ejemplo</strong><div class="danger-desc">Borra todo y recarga los 6 grupos de ejemplo.</div></div><button class="btn btn-danger" onclick="resetSampleData()">Restablecer Ejemplo</button></div>
-  </div>
+      <!-- Contenido dinámico del sub-tab -->
+      <div id="qrTabContent" style="padding:18px 20px"></div>
+    </div>
+
+    <!-- ══ 3. ZONA DE PELIGRO ════════════════════════════════════════ -->
+    <div class="danger-zone">
+      <h3>⚠️ Zona de Peligro</h3>
+      <div class="danger-row"><div><strong>Borrar todas las calificaciones</strong><div class="danger-desc">Mantiene alumnos y actividades.</div></div><button class="btn btn-danger" onclick="clearGradesConfirm()">Borrar Calificaciones</button></div>
+      <div class="danger-row"><div><strong>Borrar todos los registros de conducta</strong><div class="danger-desc">Elimina conductas e incidentes.</div></div><button class="btn btn-danger" onclick="clearConductConfirm()">Borrar Conducta</button></div>
+      <div class="danger-row"><div><strong>Borrar todos los estados de tareas</strong><div class="danger-desc">Elimina entregados, pendientes y notas.</div></div><button class="btn btn-danger" onclick="clearHWConfirm()">Borrar Tareas</button></div>
+      <div class="danger-row"><div><strong>Borrar todas las actividades</strong><div class="danger-desc">Elimina actividades, calificaciones y tareas.</div></div><button class="btn btn-danger" onclick="clearActivitiesConfirm()">Borrar Actividades</button></div>
+      <div class="danger-row"><div><strong>Borrar todos los alumnos</strong><div class="danger-desc">Elimina alumnos y todos sus datos.</div></div><button class="btn btn-danger" onclick="clearStudentsConfirm()">Borrar Alumnos</button></div>
+      <div class="danger-row"><div><strong>Reiniciar grupo completo</strong><div class="danger-desc">Borra absolutamente todo del grupo.</div></div><button class="btn btn-danger" onclick="clearGroupConfirm()">Reiniciar Grupo</button></div>
+      <div class="danger-row" style="border-top:2px dashed #ffcccc;margin-top:8px;padding-top:16px"><div><strong>Restablecer datos de ejemplo</strong><div class="danger-desc">Borra todo y recarga los 6 grupos de ejemplo.</div></div><button class="btn btn-danger" onclick="resetSampleData()">Restablecer Ejemplo</button></div>
+    </div>
+
   </div>`;
 
-  // Inicializar primer tab de sincronización
-  switchSyncTab('qr');
+  // Activar el primer sub-tab (Enviar QR)
+  switchQRTab('enviar');
 }
 
-// ══ SINCRONIZACIÓN: LÓGICA ══════════════════════════════════════════════
+// ── EXPORTAR JSON + GUARDAR LOCAL ────────────────────────────────────
+// Al exportar también se persiste en localStorage (mismo que "Guardar")
+function exportarYGuardar() {
+  // 1. Guardar localmente
+  localStorage.setItem('regCalif_v3', JSON.stringify(data));
+  // 2. Descargar archivo
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  const now = new Date();
+  a.download = `calificaciones_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('💾 Datos guardados y exportados', 'success');
+}
 
-let _activeSyncTab = 'qr';
-let _qrChunkIndex = 0;
-let _qrChunks = [];
-let _qrInstance = null;
+// ════════════════════════════════════════════════════════════════════
+// SUB-TABS DEL MÓDULO QR
+// ════════════════════════════════════════════════════════════════════
 
-function switchSyncTab(tab) {
-  _activeSyncTab = tab;
-  ['qr','import','howto'].forEach(t => {
-    const btn = document.getElementById('syncTab_' + t);
+let _activeQRTab = 'enviar'; // 'enviar' | 'recibir'
+
+/**
+ * Cambia entre sub-tab Enviar (mostrar QR) y Recibir (escanear QR).
+ * Detiene la cámara si estaba activa antes de cambiar.
+ */
+function switchQRTab(tab) {
+  _activeQRTab = tab;
+  // Detener cámara si se sale de "recibir"
+  if (tab !== 'recibir') _detenerCamaraQRSync();
+
+  ['enviar','recibir'].forEach(t => {
+    const btn = document.getElementById('qrTab_' + t);
     if (!btn) return;
-    if (t === tab) {
-      btn.style.color = '#2a4a7a';
-      btn.style.borderBottom = '2px solid #2a4a7a';
-      btn.style.fontWeight = '700';
-    } else {
-      btn.style.color = '#999';
-      btn.style.borderBottom = '2px solid transparent';
-      btn.style.fontWeight = '600';
-    }
+    const activo = t === tab;
+    btn.style.color       = activo ? '#2a4a7a' : '#999';
+    btn.style.fontWeight  = activo ? '700' : '600';
+    btn.style.borderBottom = activo ? '3px solid #2a4a7a' : '3px solid transparent';
   });
-  const c = document.getElementById('syncTabContent');
+
+  const c = document.getElementById('qrTabContent');
   if (!c) return;
-  if (tab === 'qr')     renderSyncQRTab(c);
-  if (tab === 'import') renderSyncImportTab(c);
-  if (tab === 'howto')  renderSyncHowtoTab(c);
+  if (tab === 'enviar')  _renderQREnviarTab(c);
+  if (tab === 'recibir') _renderQRRecibirTab(c);
 }
 
-function renderSyncQRTab(c) {
-  // Serializar y comprimir datos
-  const json = JSON.stringify(data);
-  const bytes = new TextEncoder().encode(json);
-  // Codificar en base64
-  let binary = '';
-  bytes.forEach(b => binary += String.fromCharCode(b));
-  const b64 = btoa(binary);
+// ── TAB ENVIAR: Generar QRs con calificaciones ───────────────────────
+let _qrEnviarChunks = [];
+let _qrEnviarIndex  = 0;
+let _qrEnviarInst   = null;
 
-  // Dividir en chunks de ~800 chars (seguro para QR)
-  const CHUNK = 800;
-  _qrChunks = [];
-  for (let i = 0; i < b64.length; i += CHUNK) {
-    _qrChunks.push(b64.slice(i, i + CHUNK));
+/**
+ * Genera los chunks LZ+base64 con SOLO las calificaciones de hoy
+ * y los muestra como código(s) QR.
+ */
+function _renderQREnviarTab(c) {
+  // Obtener payload de calificaciones (formato sync_v1)
+  const sync     = _getSyncHoy();
+  const nGrupos  = Object.keys(sync.grupos).length;
+  const nCal     = sync.totalCambios || 0;
+
+  // Construir payload comprimido
+  const json       = JSON.stringify(sync);
+  const compressed = LZString.compressToBase64(json);
+  const payload    = 'LZ:' + compressed;
+
+  // Dividir en chunks de 900 chars (seguro para QR nivel M)
+  const CHUNK = 900;
+  _qrEnviarChunks = [];
+  for (let i = 0; i < payload.length; i += CHUNK) {
+    _qrEnviarChunks.push(payload.slice(i, i + CHUNK));
   }
-  _qrChunkIndex = 0;
-
-  const totalChunks = _qrChunks.length;
+  _qrEnviarIndex = 0;
+  const total  = _qrEnviarChunks.length;
   const sizeKB = (json.length / 1024).toFixed(1);
-  const groupCount = data.groups ? data.groups.length : 0;
-  const studentCount = data.groups ? data.groups.reduce((s,g)=>s+g.students.length,0) : 0;
 
   c.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:16px">
 
-      <!-- Info de lo que se exporta -->
-      <div style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:9px;padding:12px 16px;display:flex;gap:16px;flex-wrap:wrap">
-        <div style="text-align:center;flex:1;min-width:70px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.6rem;color:#2a4a7a">${groupCount}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Grupos</div>
+      <!-- Resumen de datos -->
+      <div style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:9px;padding:12px 16px;
+                  display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+        <div style="text-align:center;flex:1;min-width:60px">
+          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#2a4a7a">${nGrupos}</div>
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Grupo${nGrupos!==1?'s':''}</div>
         </div>
-        <div style="text-align:center;flex:1;min-width:70px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.6rem;color:#2a7a4b">${studentCount}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Alumnos</div>
+        <div style="text-align:center;flex:1;min-width:60px">
+          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#2a7a4b">${nCal}</div>
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Calificaciones</div>
         </div>
-        <div style="text-align:center;flex:1;min-width:70px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.6rem;color:#b85c00">${totalChunks}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Código${totalChunks!==1?'s':''} QR</div>
+        <div style="text-align:center;flex:1;min-width:60px">
+          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#b85c00">${total}</div>
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">QR${total!==1?'s':''}</div>
         </div>
-        <div style="text-align:center;flex:1;min-width:70px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.6rem;color:#888">${sizeKB}</div>
+        <div style="text-align:center;flex:1;min-width:60px">
+          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#888">${sizeKB}</div>
           <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">KB</div>
         </div>
       </div>
 
-      ${totalChunks > 1 ? `<div style="background:#fff8e6;border:1.5px solid #f0c060;border-radius:8px;padding:10px 14px;font-size:0.8rem;color:#7a5a00">
-        ⚠️ Tus datos ocupan <strong>${totalChunks} códigos QR</strong>. Escanea cada uno en orden desde la laptop.<br>
-        <span style="font-size:0.72rem;color:#b08020">Tip: si tienes muchos grupos, puedes exportar solo uno a la vez con "Exportar este grupo".</span>
-      </div>` : `<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;padding:10px 14px;font-size:0.8rem;color:#1a5a2a">
-        ✅ Todos tus datos caben en <strong>1 código QR</strong>. ¡Fácil de escanear!
-      </div>`}
+      ${nGrupos === 0
+        ? `<div style="background:#fff3cd;border:1.5px solid #f0c060;border-radius:8px;padding:12px 16px;font-size:0.82rem;color:#7a5a00">
+             ⚠️ No hay calificaciones registradas hoy. Registra datos primero.
+           </div>`
+        : `<!-- Código QR -->
+           <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+             ${total > 1 ? `<div style="font-size:0.78rem;font-weight:700;color:#2a4a7a;text-transform:uppercase;letter-spacing:0.06em"
+               id="qrEnviarLabel">Código QR 1 de ${total}</div>` : ''}
 
-      <!-- QR Display -->
-      <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
-        <div style="font-size:0.75rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.07em">
-          ${totalChunks > 1 ? `<span id="qrChunkLabel">Código QR 1 de ${totalChunks}</span>` : 'Código QR — Todos los datos'}
-        </div>
-        <div id="qrCanvas" style="padding:16px;background:white;border:2px solid #2a4a7a;border-radius:12px;box-shadow:0 4px 20px rgba(42,74,122,0.15)"></div>
+             <div id="qrEnviarCanvas"
+               style="padding:16px;background:white;border:2px solid #2a4a7a;border-radius:12px;
+                      box-shadow:0 4px 20px rgba(42,74,122,0.15)"></div>
 
-        ${totalChunks > 1 ? `
-        <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="qrPrev()" id="qrPrevBtn" style="padding:8px 18px;border:1.5px solid #2a4a7a;background:white;color:#2a4a7a;border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer" disabled>◀ Anterior</button>
-          <div id="qrDots" style="display:flex;gap:5px"></div>
-          <button onclick="qrNext()" id="qrNextBtn" style="padding:8px 18px;background:#2a4a7a;color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">Siguiente ▶</button>
-        </div>` : ''}
+             ${total > 1 ? `
+             <div style="display:flex;align-items:center;gap:10px">
+               <button onclick="_qrEnviarNav(-1)" id="qrEnviarPrev"
+                 style="padding:8px 18px;border:1.5px solid #2a4a7a;background:white;color:#2a4a7a;
+                        border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer" disabled>
+                 ◀ Anterior
+               </button>
+               <div id="qrEnviarDots" style="display:flex;gap:5px"></div>
+               <button onclick="_qrEnviarNav(1)" id="qrEnviarNext"
+                 style="padding:8px 18px;background:#2a4a7a;color:white;border:none;border-radius:7px;
+                        font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">
+                 Siguiente ▶
+               </button>
+             </div>` : ''}
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
-          <button onclick="exportData()" style="padding:8px 16px;background:#1a1a2e;color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">💾 Guardar JSON (todos)</button>
-          <button onclick="exportCurrentGroup()" style="padding:8px 16px;background:#2a7a4b;color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">📋 Exportar este grupo</button>
-        </div>
-      </div>
+             <div style="font-size:0.72rem;color:#888;text-align:center">
+               Muestra este QR a la laptop · La laptop escanea con su cámara
+             </div>
+           </div>`
+      }
     </div>`;
 
-  // Generar primer QR
-  _generateQR(_qrChunkIndex);
+  // Generar primer QR si hay datos
+  if (nGrupos > 0) _qrEnviarGenerar(0);
 }
 
-function _generateQR(idx) {
-  const canvas = document.getElementById('qrCanvas');
+/** Genera el QR en el índice dado del array de chunks */
+function _qrEnviarGenerar(idx) {
+  const canvas = document.getElementById('qrEnviarCanvas');
   if (!canvas) return;
   canvas.innerHTML = '';
-  if (_qrInstance) { try { _qrInstance.clear(); } catch(e){} }
+  if (_qrEnviarInst) { try { _qrEnviarInst.clear(); } catch(e){} }
 
-  const totalChunks = _qrChunks.length;
-  // Prefijo: "RC:chunk:índice:total:datos"
-  const payload = `RC:${idx}:${totalChunks}:${_qrChunks[idx]}`;
+  const total   = _qrEnviarChunks.length;
+  // Formato: "SYNC:índice:total:datos"
+  const payload = `SYNC:${idx}:${total}:${_qrEnviarChunks[idx]}`;
 
   try {
-    _qrInstance = new QRCode(canvas, {
-      text: payload,
-      width: 220,
-      height: 220,
-      colorDark: '#1a1a2e',
-      colorLight: '#ffffff',
+    _qrEnviarInst = new QRCode(canvas, {
+      text: payload, width: 240, height: 240,
+      colorDark: '#1a1a2e', colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M
     });
   } catch(e) {
-    canvas.innerHTML = `<div style="color:red;font-size:0.8rem;padding:10px">Error generando QR: ${e.message}</div>`;
+    canvas.innerHTML = `<div style="color:red;font-size:0.8rem;padding:10px">Error: ${e.message}</div>`;
   }
 
-  // Actualizar label y puntos
-  const label = document.getElementById('qrChunkLabel');
-  if (label) label.textContent = `Código QR ${idx+1} de ${totalChunks}`;
+  // Actualizar label, dots y botones
+  const label = document.getElementById('qrEnviarLabel');
+  if (label) label.textContent = `Código QR ${idx+1} de ${total}`;
 
-  const dots = document.getElementById('qrDots');
+  const dots = document.getElementById('qrEnviarDots');
   if (dots) {
     dots.innerHTML = '';
-    for (let i = 0; i < totalChunks; i++) {
+    for (let i = 0; i < total; i++) {
       const d = document.createElement('div');
-      d.style.cssText = `width:8px;height:8px;border-radius:50%;background:${i===idx?'#2a4a7a':'#ddd'};transition:background 0.2s`;
+      d.style.cssText = `width:9px;height:9px;border-radius:50%;background:${i===idx?'#2a4a7a':'#ddd'};transition:background 0.2s`;
       dots.appendChild(d);
     }
   }
-
-  const prevBtn = document.getElementById('qrPrevBtn');
-  const nextBtn = document.getElementById('qrNextBtn');
-  if (prevBtn) prevBtn.disabled = idx === 0;
-  if (nextBtn) { nextBtn.disabled = idx === totalChunks-1; if(idx===totalChunks-1){nextBtn.textContent='✅ Fin';nextBtn.style.background='#2a7a4b';}else{nextBtn.textContent='Siguiente ▶';nextBtn.style.background='#2a4a7a';} }
+  const prev = document.getElementById('qrEnviarPrev');
+  const next = document.getElementById('qrEnviarNext');
+  if (prev) prev.disabled = idx === 0;
+  if (next) {
+    next.disabled = idx === total - 1;
+    next.textContent = idx === total - 1 ? '✅ Fin' : 'Siguiente ▶';
+    next.style.background = idx === total - 1 ? '#2a7a4b' : '#2a4a7a';
+  }
 }
 
-function qrNext() { if (_qrChunkIndex < _qrChunks.length-1) { _qrChunkIndex++; _generateQR(_qrChunkIndex); } }
-function qrPrev() { if (_qrChunkIndex > 0) { _qrChunkIndex--; _generateQR(_qrChunkIndex); } }
+/** Navega entre los QRs del emisor */
+function _qrEnviarNav(dir) {
+  const next = _qrEnviarIndex + dir;
+  if (next < 0 || next >= _qrEnviarChunks.length) return;
+  _qrEnviarIndex = next;
+  _qrEnviarGenerar(_qrEnviarIndex);
+}
 
+// ── TAB RECIBIR: Escanear QR con la cámara ───────────────────────────
+let _qrRecibirStream = null;
+let _qrRecibirAnim   = null;
+let _qrRecibirChunks = {};  // { índice: datos }
+let _qrRecibirTotal  = null;
+
+/**
+ * Renderiza el panel de recepción (escaneo de QR desde la tableta).
+ * Incluye botón para iniciar/detener cámara y área de feedback.
+ */
+function _renderQRRecibirTab(c) {
+  c.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <div style="font-size:0.82rem;color:#555;line-height:1.5">
+        En la <strong>Tableta</strong>: ve a Ajustes → Mostrar QR. Luego apunta esta cámara al QR.<br>
+        Si hay varios QRs, escanéalos en orden. Los datos se fusionan automáticamente.
+      </div>
+
+      <!-- Controles de cámara -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="_iniciarCamaraQRSync()" id="btnIniciarQRSync"
+          style="padding:9px 22px;background:#2a4a7a;color:white;border:none;border-radius:7px;
+                 font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+          ▶ Iniciar cámara
+        </button>
+        <button onclick="_detenerCamaraQRSync()" id="btnDetenerQRSync"
+          style="display:none;padding:9px 18px;background:#888;color:white;border:none;border-radius:7px;
+                 font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer;display:none;align-items:center;gap:6px">
+          ⏹ Detener
+        </button>
+      </div>
+
+      <!-- Visor de cámara (oculto hasta iniciar) -->
+      <div id="qrSyncVideoWrap" style="display:none;position:relative;border-radius:10px;overflow:hidden;
+                                        border:2px solid #2a4a7a;max-width:400px">
+        <video id="qrSyncVideo" autoplay playsinline muted style="width:100%;display:block"></video>
+        <canvas id="qrSyncCanvas" style="display:none"></canvas>
+        <!-- Visor del área de escaneo -->
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+          <div id="qrSyncBox"
+            style="width:220px;height:220px;border:3px solid #2a4a7a;border-radius:12px;
+                   box-shadow:0 0 0 9999px rgba(0,0,0,0.45);transition:border-color 0.25s"></div>
+        </div>
+      </div>
+
+      <!-- Barra de progreso (chunks) -->
+      <div id="qrSyncProgress" style="display:none;background:#f0f4ff;border:1.5px solid #c0d0f0;
+                                       border-radius:8px;padding:10px 14px;font-size:0.82rem">
+        <div style="font-weight:700;color:#1a2a5a;margin-bottom:4px" id="qrSyncProgressTitle">Escaneando...</div>
+        <div style="background:#e0e8ff;border-radius:4px;height:8px;margin-bottom:5px">
+          <div id="qrSyncProgressFill"
+            style="background:#2a4a7a;height:8px;border-radius:4px;width:0%;transition:width 0.3s"></div>
+        </div>
+        <div id="qrSyncProgressDetail" style="font-size:0.75rem;color:#555"></div>
+      </div>
+
+      <!-- Resultado / Feedback -->
+      <div id="qrSyncFeedback" style="min-height:20px;font-size:0.82rem"></div>
+
+    </div>`;
+}
+
+/** Inicia la cámara para escanear QR de sincronización */
+function _iniciarCamaraQRSync() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Cámara no disponible en este dispositivo', 'error'); return;
+  }
+  // Resetear estado de chunks recibidos
+  _qrRecibirChunks = {};
+  _qrRecibirTotal  = null;
+
+  const wrap = document.getElementById('qrSyncVideoWrap');
+  const btnI = document.getElementById('btnIniciarQRSync');
+  const btnD = document.getElementById('btnDetenerQRSync');
+  const fb   = document.getElementById('qrSyncFeedback');
+
+  if (wrap) wrap.style.display = 'block';
+  if (btnI) btnI.style.display = 'none';
+  if (btnD) { btnD.style.display = 'flex'; btnD.style.removeProperty('display'); btnD.style.display='flex'; }
+  if (fb)   fb.innerHTML = '<span style="color:#2a4a7a;font-size:0.85rem">🔍 Apunta al código QR de la tableta...</span>';
+
+  _cargarJsQR(() => {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
+      .then(stream => {
+        _qrRecibirStream = stream;
+        const video = document.getElementById('qrSyncVideo');
+        if (video) { video.srcObject = stream; video.play(); }
+        _qrRecibirScanFrame();
+      })
+      .catch(err => {
+        if (fb) fb.innerHTML = `<span style="color:red">❌ ${err.message}</span>`;
+        showToast('Error cámara: ' + err.message, 'error');
+      });
+  });
+}
+
+/** Detiene la cámara de recepción QR */
+function _detenerCamaraQRSync() {
+  if (_qrRecibirAnim) { cancelAnimationFrame(_qrRecibirAnim); _qrRecibirAnim = null; }
+  if (_qrRecibirStream) { _qrRecibirStream.getTracks().forEach(t => t.stop()); _qrRecibirStream = null; }
+
+  const wrap = document.getElementById('qrSyncVideoWrap');
+  const btnI = document.getElementById('btnIniciarQRSync');
+  const btnD = document.getElementById('btnDetenerQRSync');
+  if (wrap) wrap.style.display = 'none';
+  if (btnI) btnI.style.display = 'flex';
+  if (btnD) btnD.style.display = 'none';
+}
+
+/** Loop de escaneo de frames usando BarcodeDetector o jsQR */
+function _qrRecibirScanFrame() {
+  const video  = document.getElementById('qrSyncVideo');
+  const canvas = document.getElementById('qrSyncCanvas');
+  if (!video || !canvas) return;
+
+  // Función interna para procesar un código leído
+  function _procesar(raw) {
+    if (!raw.startsWith('SYNC:') && !raw.startsWith('LZ:')) return;
+
+    // Formato nuevo: "SYNC:índice:total:datos"
+    if (raw.startsWith('SYNC:')) {
+      const parts  = raw.split(':');
+      if (parts.length < 4) return;
+      const idx    = parseInt(parts[1]);
+      const total  = parseInt(parts[2]);
+      const chunk  = parts.slice(3).join(':');
+
+      // Evitar duplicados
+      if (_qrRecibirChunks[idx] === chunk) return;
+      _qrRecibirChunks[idx] = chunk;
+      _qrRecibirTotal = total;
+
+      // Actualizar progreso visual
+      const recibidos = Object.keys(_qrRecibirChunks).length;
+      const pct = Math.round(recibidos / total * 100);
+      const progWrap   = document.getElementById('qrSyncProgress');
+      const progTitle  = document.getElementById('qrSyncProgressTitle');
+      const progFill   = document.getElementById('qrSyncProgressFill');
+      const progDetail = document.getElementById('qrSyncProgressDetail');
+      const box        = document.getElementById('qrSyncBox');
+
+      if (progWrap)  progWrap.style.display = 'block';
+      if (progTitle) progTitle.textContent   = `Escaneando QRs: ${recibidos} / ${total}`;
+      if (progFill)  progFill.style.width    = pct + '%';
+      if (progDetail) progDetail.textContent  = `QR ${idx+1} recibido ✅`;
+      if (box) { box.style.borderColor = '#d4a843'; setTimeout(() => { if(box) box.style.borderColor = '#2a4a7a'; }, 400); }
+
+      // Si completamos todos los chunks → fusionar
+      if (recibidos >= total) {
+        _detenerCamaraQRSync();
+        _ensamblarYFusionarQR();
+      }
+    }
+    // Formato legado (1 solo QR, sin prefijo SYNC:)
+    else if (raw.startsWith('LZ:')) {
+      _detenerCamaraQRSync();
+      _qrRecibirChunks = { 0: raw };
+      _qrRecibirTotal  = 1;
+      _ensamblarYFusionarQR();
+    }
+  }
+
+  // Usar BarcodeDetector si está disponible (más rápido)
+  if (window.BarcodeDetector && video.readyState === video.HAVE_ENOUGH_DATA) {
+    new BarcodeDetector({ formats: ['qr_code'] }).detect(video)
+      .then(codes => { if (codes.length) _procesar(codes[0].rawValue); })
+      .catch(() => {});
+    _qrRecibirAnim = requestAnimationFrame(_qrRecibirScanFrame);
+    return;
+  }
+
+  // Fallback: jsQR
+  if (!window.jsQR) { _qrRecibirAnim = requestAnimationFrame(_qrRecibirScanFrame); return; }
+  const ctx = canvas.getContext('2d');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const code = window.jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+    if (code && code.data) _procesar(code.data);
+  }
+  _qrRecibirAnim = requestAnimationFrame(_qrRecibirScanFrame);
+}
+
+/**
+ * Ensambla los chunks recibidos, descomprime y aplica la fusión de datos.
+ */
+function _ensamblarYFusionarQR() {
+  const fb = document.getElementById('qrSyncFeedback');
+  try {
+    // Reconstruir payload completo
+    let fullPayload = '';
+    for (let i = 0; i < _qrRecibirTotal; i++) {
+      if (!_qrRecibirChunks[i]) throw new Error(`Falta el QR ${i+1}. Escanea de nuevo.`);
+      fullPayload += _qrRecibirChunks[i];
+    }
+
+    // Descomprimir (formato "LZ:..." o directo JSON)
+    let sync;
+    if (fullPayload.startsWith('LZ:')) {
+      const json = LZString.decompressFromBase64(fullPayload.slice(3));
+      if (!json) throw new Error('Error al descomprimir datos');
+      sync = JSON.parse(json);
+    } else {
+      sync = JSON.parse(fullPayload);
+    }
+
+    if (sync.version !== 'sync_v1') throw new Error('Formato de sincronización no reconocido');
+
+    // Aplicar fusión
+    _aplicarSincDia(sync, fb);
+
+  } catch(err) {
+    if (fb) fb.innerHTML = `<div style="background:#fff5f5;border:1.5px solid #ffcccc;border-radius:8px;
+      padding:10px 14px;font-size:0.82rem;color:#721c24">❌ Error: ${err.message}</div>`;
+    showToast('Error al procesar QR: ' + err.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// LÓGICA DE FUSIÓN (compartida por QR y archivo JSON)
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Fusiona los datos recibidos (via QR o archivo) con los locales.
+ * Solo actualiza calificaciones, conducta, tareas y asistencia.
+ * Nunca borra datos existentes — solo los enriquece.
+ * @param {object} sync   - Objeto con formato sync_v1
+ * @param {Element} fbEl  - Elemento DOM para mostrar resultado (opcional)
+ */
+function _aplicarSincDia(sync, fbEl) {
+  let calMerged = 0, asistMerged = 0, gruposMerged = 0;
+
+  Object.values(sync.grupos).forEach(sg => {
+    let localG = data.groups.find(g => g.id === sg.id);
+
+    // Si el grupo no existe localmente, agregarlo completo
+    if (!localG) {
+      data.groups.push({ ...sg });
+      gruposMerged++;
+      return;
+    }
+
+    // Fusionar calificaciones (solo si tiene valor)
+    Object.keys(sg.grades || {}).forEach(k => {
+      if (sg.grades[k] !== undefined && sg.grades[k] !== '') {
+        localG.grades[k] = sg.grades[k];
+        calMerged++;
+      }
+    });
+
+    // Fusionar estado de tareas
+    Object.keys(sg.hwStatus || {}).forEach(k => {
+      localG.hwStatus[k] = sg.hwStatus[k];
+    });
+
+    // Fusionar conducta (conservar el nivel más alto)
+    Object.keys(sg.conduct || {}).forEach(k => {
+      if (!localG.conduct[k] || (sg.conduct[k]?.level || 0) > (localG.conduct[k]?.level || 0)) {
+        localG.conduct[k] = sg.conduct[k];
+      }
+    });
+
+    // Fusionar asistencia en localStorage
+    const stored = JSON.parse(localStorage.getItem('regCalif_v3') || '{}');
+    if (!stored.asistencia) stored.asistencia = {};
+    Object.keys(sg.asistencia || {}).forEach(k => {
+      stored.asistencia[k] = { ...(stored.asistencia[k] || {}), ...sg.asistencia[k] };
+      asistMerged++;
+    });
+    localStorage.setItem('regCalif_v3', JSON.stringify(stored));
+    gruposMerged++;
+  });
+
+  // Guardar y re-renderizar
+  autoSave();
+  renderMain();
+
+  // Mostrar resultado
+  const msg = `✅ Sincronización completa — ${calMerged} calificaciones · ${asistMerged} asistencias · ${gruposMerged} grupo${gruposMerged !== 1 ? 's' : ''}`;
+  const fb  = fbEl || document.getElementById('qrSyncFeedback');
+  if (fb) {
+    fb.innerHTML = `<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;
+      padding:10px 14px;font-weight:700;color:#155724">${msg}</div>`;
+  }
+  showToast(msg, 'success');
+
+  // Sonido de éxito (tres tonos ascendentes)
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1100, 1320].forEach((freq, i) => {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.connect(gain); gain.connect(ac.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.12, ac.currentTime + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.12 + 0.2);
+      osc.start(ac.currentTime + i * 0.12);
+      osc.stop(ac.currentTime + i * 0.12 + 0.2);
+    });
+  } catch(e) {}
+}
+
+/**
+ * Importa un archivo sync_v1.json desde el sub-tab de sincronización
+ * (usado por el bloque "Recibir en laptop → Subir archivo").
+ */
+function importarSincDia(input) {
+  const file = input.files[0]; if (!file) return;
+  const label = document.getElementById('sincImportLabel');
+  if (label) label.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const sync = JSON.parse(e.target.result);
+      if (sync.version !== 'sync_v1') { showToast('Archivo no es un sync válido', 'error'); return; }
+      _aplicarSincDia(sync);
+    } catch(err) { showToast('Error al leer archivo: ' + err.message, 'error'); }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ── Variables y funciones de compatibilidad ─────────────────────────
+// Alias para funciones que otros módulos aún referencian
+
+/** @deprecated Usar _qrEnviarNav en su lugar */
+function qrNext() { _qrEnviarNav(1); }
+function qrPrev() { _qrEnviarNav(-1); }
+
+/** Compatibilidad: vieja función de exportar grupo individual */
 function exportCurrentGroup() {
   const g = currentGroup();
   if (!g) { showToast('Selecciona un grupo primero', 'error'); return; }
   const exportObj = { groups: [g], exportedAt: new Date().toISOString(), exportType: 'single_group' };
   const json = JSON.stringify(exportObj, null, 2);
-  const blob = new Blob([json], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const now = new Date();
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href = url;
+  const now  = new Date();
   a.download = `grupo_${g.name.replace(/[^a-z0-9]/gi,'_')}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  a.click(); URL.revokeObjectURL(url);
   showToast('📤 Grupo exportado', 'success');
 }
 
-function renderSyncImportTab(c) {
-  c.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:16px">
+// ── Stub: las siguientes funciones son referencias internas que se
+//    mantienen para compatibilidad con código de asistencia y otros módulos.
 
-      <!-- Opción A: Escanear QR desde laptop -->
-      <div style="background:#f0f4ff;border:1.5px solid #b0c4e8;border-radius:10px;overflow:hidden">
-        <div style="padding:12px 16px;background:#2a4a7a;display:flex;align-items:center;gap:8px">
-          <span>📷</span>
-          <div style="color:white;font-weight:700;font-size:0.9rem">Opción A — Escanear QR con la cámara de la laptop</div>
-        </div>
-        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-          <div style="font-size:0.82rem;color:#555">Apunta la cámara de tu laptop al código QR de la tableta. Si son varios QRs, escanéalos uno por uno en orden.</div>
-          <div id="qrScanArea">
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button onclick="startQRScan()" style="padding:9px 20px;background:#2a4a7a;color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">📷 Iniciar cámara</button>
-              <button onclick="stopQRScan()" id="stopScanBtn" style="padding:9px 16px;background:#888;color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;display:none">⏹ Detener</button>
-            </div>
-          </div>
-          <div id="qrScanStatus" style="font-size:0.8rem;color:#888"></div>
-          <div id="qrScanResult"></div>
-        </div>
-      </div>
-
-      <!-- Opción B: Importar archivo JSON -->
-      <div style="background:#f5f0e8;border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
-        <div style="padding:12px 16px;background:#1a1a2e;display:flex;align-items:center;gap:8px">
-          <span>📁</span>
-          <div style="color:white;font-weight:700;font-size:0.9rem">Opción B — Importar archivo JSON (por cable / WhatsApp / correo)</div>
-        </div>
-        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
-          <div style="font-size:0.82rem;color:#555">Elige si quieres <strong>reemplazar todo</strong> o <strong>fusionar</strong> los datos nuevos con los existentes en esta laptop.</div>
-
-          <div style="display:flex;gap:8px">
-            <label style="flex:1;display:flex;flex-direction:column;gap:4px;cursor:pointer">
-              <div style="display:flex;align-items:center;gap:6px">
-                <input type="radio" name="importMode" value="merge" checked onchange="document.getElementById('importModeDesc').textContent=this.dataset.desc" data-desc="Se conservan los datos de la laptop. Los nuevos datos de la tableta se agregan o actualizan encima.">
-                <span style="font-weight:700;font-size:0.85rem;color:#2a4a7a">🔀 Fusionar (recomendado)</span>
-              </div>
-              <div style="font-size:0.72rem;color:#888;margin-left:20px">Tableta + Laptop = combinado</div>
-            </label>
-            <label style="flex:1;display:flex;flex-direction:column;gap:4px;cursor:pointer">
-              <div style="display:flex;align-items:center;gap:6px">
-                <input type="radio" name="importMode" value="replace" onchange="document.getElementById('importModeDesc').textContent=this.dataset.desc" data-desc="⚠️ Se reemplaza TODO con los datos importados. Los datos actuales de la laptop se pierden.">
-                <span style="font-weight:700;font-size:0.85rem;color:#c8422a">🔄 Reemplazar todo</span>
-              </div>
-              <div style="font-size:0.72rem;color:#888;margin-left:20px">Solo los datos del archivo</div>
-            </label>
-          </div>
-          <div id="importModeDesc" style="font-size:0.75rem;color:#666;background:#fffff0;border:1px solid #ddd;border-radius:5px;padding:8px 12px">Se conservan los datos de la laptop. Los nuevos datos de la tableta se agregan o actualizan encima.</div>
-
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <label style="padding:9px 20px;background:#2a7a4b;color:white;border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
-              ⬇️ Seleccionar archivo JSON
-              <input type="file" accept=".json" style="display:none" onchange="importDataSmart(event)">
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Resultado de fusión -->
-      <div id="mergeResultArea"></div>
-    </div>`;
+function setSincImportMode(mode) {
+  // Redirigir a la nueva UI (tab recibir ya tiene el manejo unificado)
+  switchQRTab('recibir');
 }
 
-// ══ QR SCANNER (usando API de cámara + jsQR) ════════════════════════
-
-let _scanStream = null;
-let _scanAnimFrame = null;
-let _qrCollectedChunks = {};
-let _qrExpectedTotal = null;
-
-function startQRScan() {
-  const area = document.getElementById('qrScanArea');
-  const status = document.getElementById('qrScanStatus');
-  if (!area || !status) return;
-
-  // Inyectar jsQR dinámicamente
-  if (!window.jsQR) {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
-    script.onload = () => _initCamera(area, status);
-    script.onerror = () => { status.textContent = '❌ No se pudo cargar el escáner QR. Usa la Opción B (archivo JSON).'; status.style.color = 'red'; };
-    document.head.appendChild(script);
-  } else {
-    _initCamera(area, status);
-  }
-}
-
-function _initCamera(area, status) {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    status.textContent = '❌ Esta computadora no tiene acceso a cámara. Usa la Opción B.';
-    status.style.color = 'red'; return;
-  }
-
-  _qrCollectedChunks = {};
-  _qrExpectedTotal = null;
-
-  const videoWrap = document.createElement('div');
-  videoWrap.id = 'qrVideoWrap';
-  videoWrap.style.cssText = 'margin-top:10px;position:relative;border-radius:10px;overflow:hidden;border:2px solid #2a4a7a;max-width:360px;';
-  videoWrap.innerHTML = `
-    <video id="qrVideo" autoplay playsinline muted style="width:100%;display:block;border-radius:8px"></video>
-    <canvas id="qrScanCanvas" style="display:none"></canvas>
-    <div id="qrScanOverlay" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
-      <div style="width:160px;height:160px;border:3px solid rgba(42,74,122,0.8);border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,0.35)"></div>
-    </div>`;
-  area.appendChild(videoWrap);
-
-  const stopBtn = document.getElementById('stopScanBtn');
-  if (stopBtn) stopBtn.style.display = 'flex';
-  status.style.color = '#2a4a7a';
-  status.textContent = '🔍 Cámara activa — apunta al código QR de la tableta';
-
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    .then(stream => {
-      _scanStream = stream;
-      const video = document.getElementById('qrVideo');
-      video.srcObject = stream;
-      video.play();
-      video.addEventListener('loadedmetadata', () => _scanFrame());
-    })
-    .catch(err => {
-      status.textContent = `❌ Sin acceso a cámara: ${err.message}. Usa la Opción B.`;
-      status.style.color = 'red';
-    });
-}
-
-function _scanFrame() {
-  const video = document.getElementById('qrVideo');
-  const canvas = document.getElementById('qrScanCanvas');
-  if (!video || !canvas || !window.jsQR) return;
-
-  const ctx = canvas.getContext('2d');
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-    if (code && code.data) {
-      _processQRPayload(code.data);
-    }
-  }
-  _scanAnimFrame = requestAnimationFrame(_scanFrame);
-}
-
-function stopQRScan() {
-  if (_scanAnimFrame) { cancelAnimationFrame(_scanAnimFrame); _scanAnimFrame = null; }
-  if (_scanStream) { _scanStream.getTracks().forEach(t => t.stop()); _scanStream = null; }
-  const wrap = document.getElementById('qrVideoWrap');
-  if (wrap) wrap.remove();
-  const stopBtn = document.getElementById('stopScanBtn');
-  if (stopBtn) stopBtn.style.display = 'none';
-  const status = document.getElementById('qrScanStatus');
-  if (status) { status.textContent = '⏹ Cámara detenida.'; status.style.color = '#888'; }
-}
-
-function _processQRPayload(raw) {
-  // Formato esperado: "RC:índice:total:datos_b64"
-  if (!raw.startsWith('RC:')) return;
-  const parts = raw.split(':');
-  if (parts.length < 4) return;
-  const idx = parseInt(parts[1]);
-  const total = parseInt(parts[2]);
-  const chunkData = parts.slice(3).join(':'); // en caso de que haya ':' en el b64
-
-  const status = document.getElementById('qrScanStatus');
-
-  // Evitar procesar el mismo chunk dos veces
-  if (_qrCollectedChunks[idx] === chunkData) return;
-
-  _qrCollectedChunks[idx] = chunkData;
-  _qrExpectedTotal = total;
-
-  const collected = Object.keys(_qrCollectedChunks).length;
-
-  if (status) {
-    if (collected < total) {
-      status.style.color = '#2a7a4b';
-      status.textContent = `✅ Escaneado ${collected} de ${total} códigos QR. Muestra el siguiente.`;
-    } else {
-      status.style.color = '#2a7a4b';
-      status.textContent = `✅ ¡Todos los ${total} códigos escaneados! Procesando...`;
-      stopQRScan();
-      setTimeout(() => _assembleQRData(), 300);
-    }
-  }
-}
-
-function _assembleQRData() {
-  const total = _qrExpectedTotal;
-  let b64 = '';
-  for (let i = 0; i < total; i++) {
-    if (!_qrCollectedChunks[i]) {
-      showToast(`Falta el código QR ${i+1}. Vuelve a escanear.`, 'error'); return;
-    }
-    b64 += _qrCollectedChunks[i];
-  }
-  try {
-    const binary = atob(b64);
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-    const json = new TextDecoder().decode(bytes);
-    const imported = JSON.parse(json);
-    const resultArea = document.getElementById('qrScanResult');
-    if (resultArea) resultArea.innerHTML = `<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#1a5a2a;margin-top:8px">
-      ✅ Datos leídos correctamente: <strong>${imported.groups ? imported.groups.length : 0} grupos</strong>.<br>
-      <button onclick="_applyImportedData(window._qrImportedData, 'merge')" style="margin-top:8px;padding:7px 16px;background:#2a7a4b;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">🔀 Fusionar con datos actuales</button>
-      <button onclick="_applyImportedData(window._qrImportedData, 'replace')" style="margin-top:8px;margin-left:6px;padding:7px 16px;background:#c8422a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">🔄 Reemplazar todo</button>
-    </div>`;
-    window._qrImportedData = imported;
-  } catch(e) {
-    showToast('Error decodificando QR: ' + e.message, 'error');
-  }
-}
-
-// ══ IMPORTAR / FUSIONAR DATOS ═══════════════════════════════════════
-
-function importDataSmart(event) {
-  const file = event.target.files[0]; if (!file) return;
-  const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'merge';
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!imported.groups || !Array.isArray(imported.groups)) throw new Error('Formato inválido');
-      _applyImportedData(imported, mode);
-    } catch(err) {
-      showToast('Error al importar: ' + err.message, 'error');
-    }
-  };
-  reader.readAsText(file);
-  event.target.value = '';
-}
-
-function _applyImportedData(imported, mode) {
-  if (!imported || !imported.groups) { showToast('Datos inválidos', 'error'); return; }
-
-  _snapshot();
-
-  // Normalizar grupos importados
-  imported.groups.forEach(g => {
-    if (!g.grades)    g.grades    = {};
-    if (!g.conduct)   g.conduct   = {};
-    if (!g.hwStatus)  g.hwStatus  = {};
-    if (!g.manualAvg) g.manualAvg = {};
-    if (!g.students)  g.students  = [];
-    if (!g.activities) g.activities = [];
-    g.activities.forEach(a => { if (!a.id) a.id = Date.now().toString(36)+Math.random().toString(36).slice(2); });
-    g.students.forEach(s => { if (!s.id) s.id = Date.now().toString(36)+Math.random().toString(36).slice(2); });
-  });
-
-  let resultMsg = '';
-
-  if (mode === 'replace') {
-    data = imported;
-    resultMsg = `🔄 Datos reemplazados: ${data.groups.length} grupos cargados.`;
-  } else {
-    // ══ FUSIÓN INTELIGENTE ══
-    // Para cada grupo importado:
-    //   - Si ya existe (mismo id o mismo nombre+materia+trimestre) → fusionar calificaciones, conductas, tareas
-    //   - Si no existe → agregarlo
-    let added = 0, merged = 0;
-
-    imported.groups.forEach(impGrp => {
-      // Buscar grupo existente por id primero, luego por nombre+trimestre
-      let existing = data.groups.find(g => g.id === impGrp.id);
-      if (!existing) {
-        existing = data.groups.find(g =>
-          g.name.trim().toLowerCase() === impGrp.name.trim().toLowerCase() &&
-          (g.trimestre||'') === (impGrp.trimestre||'') &&
-          (g.subject||'').trim().toLowerCase() === (impGrp.subject||'').trim().toLowerCase()
-        );
-      }
-
-      if (!existing) {
-        // Grupo nuevo: agregar completo
-        data.groups.push(impGrp);
-        added++;
-      } else {
-        // Fusionar en grupo existente
-        merged++;
-
-        // Fusionar alumnos: agregar los que no existen
-        impGrp.students.forEach(impStu => {
-          const exStu = existing.students.find(s => s.id === impStu.id || s.name.trim().toLowerCase() === impStu.name.trim().toLowerCase());
-          if (!exStu) {
-            existing.students.push(impStu);
-          } else {
-            // Actualizar nombre si cambió
-            exStu.name = impStu.name;
-            if (impStu.inactive !== undefined) exStu.inactive = impStu.inactive;
-          }
-        });
-
-        // Fusionar actividades: agregar las que no existen
-        impGrp.activities.forEach(impAct => {
-          const exAct = existing.activities.find(a => a.id === impAct.id || a.name.trim().toLowerCase() === impAct.name.trim().toLowerCase());
-          if (!exAct) {
-            existing.activities.push(impAct);
-          }
-        });
-
-        // Fusionar calificaciones: la tableta gana (datos más recientes)
-        Object.entries(impGrp.grades).forEach(([key, val]) => {
-          existing.grades[key] = val;
-        });
-
-        // Fusionar conductas: la tableta gana
-        Object.entries(impGrp.conduct).forEach(([sid, cond]) => {
-          existing.conduct[sid] = cond;
-        });
-
-        // Fusionar tareas: la tableta gana
-        Object.entries(impGrp.hwStatus).forEach(([key, hw]) => {
-          existing.hwStatus[key] = hw;
-        });
-
-        // Fusionar promedios manuales: la tableta gana
-        if (impGrp.manualAvg) {
-          Object.entries(impGrp.manualAvg).forEach(([sid, avg]) => {
-            existing.manualAvg[sid] = avg;
-          });
-        }
-      }
-    });
-
-    resultMsg = `🔀 Fusión completada: ${merged} grupo${merged!==1?'s':''} actualizados, ${added} grupo${added!==1?'s':''} nuevos.`;
-  }
-
-  localStorage.setItem('regCalif_v3', JSON.stringify(data));
-  currentGroupId = null;
-  currentTab = 'calificaciones';
-  renderSidebar();
-  if (data.groups.length) selectGroup(data.groups[0].id);
-  else renderMain();
-
-  const resultArea = document.getElementById('mergeResultArea');
-  if (resultArea) {
-    resultArea.innerHTML = `<div style="background:#f0fff4;border:2px solid #2a7a4b;border-radius:9px;padding:14px 18px;font-size:0.88rem;color:#1a5a2a;font-weight:600">
-      ✅ ${resultMsg}
-      <div style="font-size:0.75rem;color:#888;font-weight:400;margin-top:4px">Los grupos están actualizados en el panel izquierdo.</div>
-    </div>`;
-  }
-  showToast(resultMsg, 'success');
-}
-
+// El bloque anterior renderSettingsTab incluía estas funciones que
+// ahora están unificadas. Se mantienen vacíos para no romper refs.
+function switchSyncTab(tab) { switchQRTab(tab === 'qr' ? 'enviar' : 'recibir'); }
+function renderSyncQRTab()   { switchQRTab('enviar'); }
+function renderSyncImportTab(){ switchQRTab('recibir'); }
 function renderSyncHowtoTab(c) {
+  if (!c) c = document.getElementById('qrTabContent');
+  if (!c) return;
   c.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:14px;font-size:0.85rem;color:#444">
-
-      <div style="background:#f0f4ff;border-radius:9px;padding:14px 18px;border-left:4px solid #2a4a7a">
-        <div style="font-weight:700;color:#2a4a7a;margin-bottom:8px;font-size:0.92rem">📱 En la TABLETA — Exportar lo que registraste</div>
-        <ol style="margin-left:16px;line-height:2">
-          <li>Abre esta app en la tableta (guarda el archivo HTML en la tableta)</li>
-          <li>Ve a <strong>Ajustes → 📤 Exportar por QR</strong></li>
-          <li>Aparecerán uno o más códigos QR con todos tus datos</li>
-          <li>Mantén la tableta lista para mostrar los QRs a la laptop</li>
-        </ol>
-      </div>
-
-      <div style="background:#f0fff4;border-radius:9px;padding:14px 18px;border-left:4px solid #2a7a4b">
-        <div style="font-weight:700;color:#2a7a4b;margin-bottom:8px;font-size:0.92rem">💻 En la LAPTOP — Recibir los datos</div>
-        <div style="font-weight:600;color:#555;margin-bottom:6px">Opción A — Cámara (más fácil):</div>
-        <ol style="margin-left:16px;line-height:2">
-          <li>Ve a <strong>Ajustes → 📥 Importar/Fusionar → Escanear QR</strong></li>
-          <li>Haz clic en <strong>"Iniciar cámara"</strong></li>
-          <li>Apunta la cámara al QR de la tableta</li>
-          <li>Si hay varios QRs, muestra cada uno en orden</li>
-          <li>Elige <strong>Fusionar</strong> para conservar todo</li>
-        </ol>
-        <div style="font-weight:600;color:#555;margin-bottom:6px;margin-top:10px">Opción B — Archivo JSON (sin cámara):</div>
-        <ol style="margin-left:16px;line-height:2">
-          <li>En la tableta, ve a <strong>Ajustes → Exportar por QR → 💾 Guardar JSON</strong></li>
-          <li>Comparte el archivo por <strong>WhatsApp, correo, USB o cable</strong></li>
-          <li>En la laptop, ve a <strong>Importar/Fusionar → Seleccionar archivo JSON</strong></li>
-          <li>Elige <strong>Fusionar</strong> y listo</li>
-        </ol>
-      </div>
-
-      <div style="background:#fff8e6;border-radius:9px;padding:14px 18px;border-left:4px solid #d4a843">
-        <div style="font-weight:700;color:#7a5a00;margin-bottom:8px">🔀 ¿Qué hace la "Fusión"?</div>
-        <ul style="margin-left:16px;line-height:2">
-          <li>Los grupos nuevos (creados en tableta) se agregan a la laptop</li>
-          <li>Los alumnos nuevos se agregan a los grupos existentes</li>
-          <li>Las calificaciones registradas en la tableta <strong>se actualizan</strong> en la laptop</li>
-          <li>Las calificaciones que ya tenías en la laptop <strong>no se borran</strong></li>
-          <li>La conducta y las tareas también se fusionan</li>
-        </ul>
-      </div>
-
-      <div style="background:#fff5f5;border-radius:9px;padding:14px 18px;border-left:4px solid #c8422a">
-        <div style="font-weight:700;color:#c8422a;margin-bottom:6px">⚠️ Recomendaciones</div>
-        <ul style="margin-left:16px;line-height:2">
-          <li>Usa siempre <strong>Fusionar</strong>, no "Reemplazar todo"</li>
-          <li>Haz una copia de seguridad (JSON) antes de importar</li>
-          <li>Si usas el mismo grupo en tableta y laptop al mismo tiempo, los cambios de la tableta ganan al fusionar</li>
-        </ul>
+    <div style="font-size:0.85rem;color:#555;line-height:1.7;display:flex;flex-direction:column;gap:10px">
+      <div style="font-weight:700;color:#1a1a2e;font-size:0.92rem">¿Cómo sincronizar Tableta ↔ Laptop?</div>
+      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li><strong>En la Tableta:</strong> Ve a ⚙️ Ajustes → Sincronización QR → <em>Mostrar QR</em>. Aparecerá uno o más códigos QR.</li>
+        <li><strong>En la Laptop:</strong> Ve a ⚙️ Ajustes → Sincronización QR → <em>Escanear QR</em>. Toca <em>▶ Iniciar cámara</em>.</li>
+        <li>Apunta la cámara de la laptop al QR de la tableta. Si hay varios, escanéalos en orden.</li>
+        <li>Al terminar, los datos se fusionan automáticamente. ✅</li>
+      </ol>
+      <div style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:8px;padding:10px 14px;font-size:0.8rem;color:#1a2a5a">
+        💡 <strong>Tip:</strong> Solo se transfieren calificaciones, conducta, tareas y asistencia. Los datos existentes en la laptop <strong>nunca se borran</strong>, solo se enriquecen.
       </div>
     </div>`;
 }
 
-function clearGradesConfirm()    { pendingConfirm=()=>{const g=currentGroup();g.grades={};autoSave();renderMain();showToast('Calificaciones eliminadas','success');}; showConfirm('Borrar Calificaciones','¿Eliminar todas las calificaciones?'); }
+// Mantener referencia para compatibilidad con código previo
+const _origRenderSettings = null; // ya no se usa, pero evita errores si algo lo referencia
+
+function _renderSyncInfo() { /* ya no se usa en la nueva UI */ }
+
+// ── Variables de compatibilidad heredadas (no eliminadas por si otros módulos las usan)
+let _activeSyncTab = 'qr';
+let _qrChunkIndex  = 0;
+let _qrChunks      = [];
+let _qrInstance    = null;
+
 function clearGradesConfirm()    { pendingConfirm=()=>{const g=currentGroup();g.grades={};autoSave();renderMain();showToast('Calificaciones eliminadas','success');}; showConfirm('Borrar Calificaciones','¿Eliminar todas las calificaciones?'); }
 function clearConductConfirm()   { pendingConfirm=()=>{const g=currentGroup();g.conduct={};autoSave();renderMain();showToast('Conducta eliminada','success');}; showConfirm('Borrar Conducta','¿Eliminar todos los registros de conducta?'); }
 function clearHWConfirm()        { pendingConfirm=()=>{const g=currentGroup();g.hwStatus={};autoSave();renderMain();showToast('Tareas eliminadas','success');}; showConfirm('Borrar Tareas','¿Eliminar todos los estados de entrega de tareas?'); }
@@ -4900,9 +4859,6 @@ function _renderSyncInfo() {
   `;
 }
 
-// Llamar cuando se entra a ajustes
-const _origRenderSettings = window.renderSettingsTab;
-
 function exportarSincDia() {
   const sync = _getSyncHoy();
   if (Object.keys(sync.grupos).length === 0) {
@@ -5032,394 +4988,6 @@ function _cargarQRCode(cb) {
   // QRCode library is now embedded inline - always available
   cb();
 }
-
-function importarSincDia(input) {
-  const file = input.files[0]; if(!file) return;
-  const label = document.getElementById('sincImportLabel');
-  if(label) label.textContent = file.name;
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const sync = JSON.parse(e.target.result);
-      if(sync.version !== 'sync_v1') { showToast('Archivo no es un sync válido', 'error'); return; }
-
-      let calMerged=0, asistMerged=0, gruposMerged=0;
-
-      Object.values(sync.grupos).forEach(sg => {
-        // Buscar grupo correspondiente en datos locales
-        let localG = data.groups.find(g => g.id === sg.id);
-        if(!localG) {
-          // Si no existe, crear el grupo
-          data.groups.push({...sg});
-          gruposMerged++; return;
-        }
-
-        // Fusionar calificaciones — solo sobreescribe si hay valor nuevo
-        Object.keys(sg.grades||{}).forEach(k => {
-          if(sg.grades[k] !== undefined && sg.grades[k] !== '') {
-            localG.grades[k] = sg.grades[k];
-            calMerged++;
-          }
-        });
-
-        // Fusionar tareas
-        Object.keys(sg.hwStatus||{}).forEach(k => { localG.hwStatus[k] = sg.hwStatus[k]; });
-
-        // Fusionar conducta
-        Object.keys(sg.conduct||{}).forEach(k => {
-          if(!localG.conduct[k] || (sg.conduct[k]?.level||0) > (localG.conduct[k]?.level||0)) {
-            localG.conduct[k] = sg.conduct[k];
-          }
-        });
-
-        // Fusionar asistencia
-        const stored = JSON.parse(localStorage.getItem('regCalif_v3')||'{}');
-        if(!stored.asistencia) stored.asistencia = {};
-        Object.keys(sg.asistencia||{}).forEach(k => {
-          stored.asistencia[k] = {...(stored.asistencia[k]||{}), ...sg.asistencia[k]};
-          asistMerged++;
-        });
-        localStorage.setItem('regCalif_v3', JSON.stringify(stored));
-
-        gruposMerged++;
-      });
-
-      autoSave();
-      renderMain();
-
-      showToast(`✅ Sincronización completa — ${calMerged} calificaciones, ${asistMerged} registros de asistencia en ${gruposMerged} grupo${gruposMerged!==1?'s':''}`, 'success');
-
-    } catch(err) {
-      showToast('Error al leer el archivo: ' + err.message, 'error');
-    }
-    input.value='';
-  };
-  reader.readAsText(file);
-}
-
-// Inicializar info cuando se carga la sección
-setTimeout(()=>_renderSyncInfo(), 500);
-
-
-// ════════════════════════════════════════════════════════════════════
-// SCANNER QR PARA SINCRONIZACIÓN (laptop recibe desde tableta)
-// ════════════════════════════════════════════════════════════════════
-
-let _sincScanner = {
-  stream: null, anim: null, active: false,
-  chunks: {}, total: 0, received: new Set()
-};
-
-function setSincImportMode(mode) {
-  const cam  = document.getElementById('sincImportCam');
-  const file = document.getElementById('sincImportFile');
-  const btnC = document.getElementById('btnSincCam');
-  const btnF = document.getElementById('btnSincFile');
-  if(mode==='cam'){
-    if(cam)  cam.style.display='block';
-    if(file) file.style.display='none';
-    if(btnC){ btnC.style.background='#2a4a8a';btnC.style.color='white';btnC.style.borderColor='#2a4a8a'; }
-    if(btnF){ btnF.style.background='var(--cream)';btnF.style.color='var(--ink)';btnF.style.borderColor='var(--border)'; }
-  } else {
-    detenerSincScanner();
-    if(cam)  cam.style.display='none';
-    if(file) file.style.display='block';
-    if(btnC){ btnC.style.background='var(--cream)';btnC.style.color='var(--ink)';btnC.style.borderColor='var(--border)'; }
-    if(btnF){ btnF.style.background='#b85c00';btnF.style.color='white';btnF.style.borderColor='#b85c00'; }
-  }
-}
-
-function iniciarSincScanner() {
-  if(!navigator.mediaDevices){ showToast('Cámara no disponible en este dispositivo','error'); return; }
-
-  const wrap  = document.getElementById('sincScannerWrap');
-  const btnI  = document.getElementById('btnIniciarSincCam');
-  const btnD  = document.getElementById('btnDetenerSincCam');
-  const prog  = document.getElementById('sincScanProgress');
-  const fb    = document.getElementById('sincScanFeedback');
-
-  if(wrap)  wrap.style.display='block';
-  if(btnI)  btnI.style.display='none';
-  if(btnD)  btnD.style.display='inline-block';
-  if(prog)  prog.style.display='block';
-  if(fb)    fb.innerHTML='<span style="color:#2a4a8a">🔍 Apunta al QR de la tableta...</span>';
-
-  // Reset chunks
-  _sincScanner.chunks  = {};
-  _sincScanner.total   = 0;
-  _sincScanner.received = new Set();
-
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}})
-    .then(stream => {
-      _sincScanner.stream = stream;
-      _sincScanner.active = true;
-      const video = document.getElementById('sincScanVideo');
-      if(video){ video.srcObject=stream; video.play(); }
-      _cargarJsQR(() => _sincScanFrame());
-    })
-    .catch(err => {
-      if(fb) fb.innerHTML=`<span style="color:red">❌ ${err.message}</span>`;
-      showToast('Error cámara: '+err.message,'error');
-    });
-}
-
-function detenerSincScanner() {
-  _sincScanner.active = false;
-  if(_sincScanner.anim){ cancelAnimationFrame(_sincScanner.anim); _sincScanner.anim=null; }
-  if(_sincScanner.stream){ _sincScanner.stream.getTracks().forEach(t=>{t.stop();t.enabled=false;}); _sincScanner.stream=null; }
-  const video = document.getElementById('sincScanVideo');
-  if(video){ video.srcObject=null; video.load(); }
-  const wrap = document.getElementById('sincScannerWrap');
-  const btnI = document.getElementById('btnIniciarSincCam');
-  const btnD = document.getElementById('btnDetenerSincCam');
-  if(wrap)  wrap.style.display='none';
-  if(btnI)  btnI.style.display='inline-block';
-  if(btnD)  btnD.style.display='none';
-}
-
-function _sincScanFrame() {
-  if(!_sincScanner.active) return;
-  const video  = document.getElementById('sincScanVideo');
-  const canvas = document.getElementById('sincScanCanvas');
-  if(!video||!canvas){ _sincScanner.anim=requestAnimationFrame(_sincScanFrame); return; }
-
-  function processCode(raw) {
-    try {
-      // Nuevo formato: QR único comprimido con LZ (prefijo "LZ:")
-      if(typeof raw === 'string' && raw.startsWith('LZ:')) {
-        const compressed = raw.slice(3);
-        const json = LZString.decompressFromBase64(compressed);
-        if(!json) { showToast('Error al descomprimir QR','error'); return; }
-        const sync = JSON.parse(json);
-        if(sync.version !== 'sync_v1') { showToast('Formato QR no reconocido','error'); return; }
-        detenerSincScanner();
-        const box = document.getElementById('sincScanBox');
-        if(box){ box.style.borderColor='#2a7a4b'; }
-        const fb = document.getElementById('sincScanFeedback');
-        if(fb) fb.innerHTML='<span style="color:#2a7a4b;font-weight:700">✅ QR escaneado — aplicando cambios...</span>';
-        setTimeout(() => _aplicarSincDia(sync), 200);
-        return;
-      }
-
-      const obj = JSON.parse(raw);
-      // Formato legacy multi-QR: {i: índice, t: total, d: datos}
-      if(typeof obj.i==='number' && typeof obj.t==='number' && obj.d) {
-        if(!_sincScanner.received.has(obj.i)) {
-          _sincScanner.chunks[obj.i] = obj.d;
-          _sincScanner.total = obj.t;
-          _sincScanner.received.add(obj.i);
-
-          // Flash verde en recuadro
-          const box = document.getElementById('sincScanBox');
-          if(box){ box.style.borderColor='#2a7a4b'; setTimeout(()=>{if(box)box.style.borderColor='#2a4a8a';},400); }
-
-          // Actualizar progreso
-          const recibidos = _sincScanner.received.size;
-          const total     = _sincScanner.total;
-          const pct       = Math.round(recibidos/total*100);
-          const fill  = document.getElementById('sincScanProgressFill');
-          const title = document.getElementById('sincScanProgressTitle');
-          const detail= document.getElementById('sincScanProgressDetail');
-          const fb    = document.getElementById('sincScanFeedback');
-          if(fill)  fill.style.width = pct+'%';
-          if(title) title.textContent = `QR ${recibidos} de ${total} escaneados`;
-          if(detail){
-            const faltantes = [];
-            for(let i=0;i<total;i++){ if(!_sincScanner.received.has(i)) faltantes.push(i+1); }
-            detail.textContent = faltantes.length ? `Faltan QRs: ${faltantes.join(', ')}` : '¡Todos escaneados!';
-          }
-          if(fb) fb.innerHTML=`<span style="color:#2a7a4b;font-weight:700">✅ QR ${obj.i+1}/${total} recibido</span>`;
-
-          // Si ya están todos → fusionar automáticamente
-          if(recibidos === total) {
-            detenerSincScanner();
-            _fusionarChunksSinc();
-          }
-        }
-      }
-    } catch(e) { /* QR no es sync, ignorar */ }
-  }
-
-  // Usar BarcodeDetector si disponible
-  if(window.BarcodeDetector && video.readyState===video.HAVE_ENOUGH_DATA) {
-    new BarcodeDetector({formats:['qr_code']}).detect(video)
-      .then(codes=>{ if(codes.length) processCode(codes[0].rawValue); })
-      .catch(()=>{});
-    _sincScanner.anim = requestAnimationFrame(_sincScanFrame);
-    return;
-  }
-
-  // Fallback jsQR
-  if(!window.jsQR){ _sincScanner.anim=requestAnimationFrame(_sincScanFrame); return; }
-  const ctx = canvas.getContext('2d');
-  if(video.readyState===video.HAVE_ENOUGH_DATA) {
-    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const code=window.jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height,{inversionAttempts:'dontInvert'});
-    if(code&&code.data) processCode(code.data);
-  }
-  _sincScanner.anim = requestAnimationFrame(_sincScanFrame);
-}
-
-function _fusionarChunksSinc() {
-  try {
-    let fullStr = '';
-    for(let i=0; i<_sincScanner.total; i++) {
-      fullStr += _sincScanner.chunks[i];
-    }
-    // Soportar formato LZ comprimido (prefijo "LZ:") o JSON directo legacy
-    let sync;
-    if(fullStr.startsWith('LZ:')) {
-      const json = LZString.decompressFromBase64(fullStr.slice(3));
-      if(!json) { showToast('Error al descomprimir datos QR','error'); return; }
-      sync = JSON.parse(json);
-    } else {
-      sync = JSON.parse(fullStr);
-    }
-    if(sync.version !== 'sync_v1') {
-      showToast('Formato de sincronización no reconocido','error'); return;
-    }
-    _aplicarSincDia(sync);
-  } catch(err) {
-    showToast('Error al reconstruir datos: '+err.message,'error');
-    const fb = document.getElementById('sincScanFeedback');
-    if(fb) fb.innerHTML=`<span style="color:red">❌ Error: ${err.message}</span>`;
-  }
-}
-
-function _aplicarSincDia(sync) {
-  let calMerged=0, asistMerged=0, gruposMerged=0;
-
-  Object.values(sync.grupos).forEach(sg => {
-    let localG = data.groups.find(g => g.id === sg.id);
-    if(!localG){ data.groups.push({...sg}); gruposMerged++; return; }
-
-    Object.keys(sg.grades||{}).forEach(k=>{
-      if(sg.grades[k]!==undefined&&sg.grades[k]!==''){localG.grades[k]=sg.grades[k];calMerged++;}
-    });
-    Object.keys(sg.hwStatus||{}).forEach(k=>{ localG.hwStatus[k]=sg.hwStatus[k]; });
-    Object.keys(sg.conduct||{}).forEach(k=>{
-      if(!localG.conduct[k]||(sg.conduct[k]?.level||0)>(localG.conduct[k]?.level||0))
-        localG.conduct[k]=sg.conduct[k];
-    });
-    const stored=JSON.parse(localStorage.getItem('regCalif_v3')||'{}');
-    if(!stored.asistencia) stored.asistencia={};
-    Object.keys(sg.asistencia||{}).forEach(k=>{
-      stored.asistencia[k]={...(stored.asistencia[k]||{}),...sg.asistencia[k]};
-      asistMerged++;
-    });
-    localStorage.setItem('regCalif_v3',JSON.stringify(stored));
-    gruposMerged++;
-  });
-
-  autoSave();
-  renderMain();
-
-  const fb = document.getElementById('sincScanFeedback');
-  const msg = `✅ ¡Sincronización completa! — ${calMerged} calificaciones, ${asistMerged} registros de asistencia en ${gruposMerged} grupo${gruposMerged!==1?'s':''}`;
-  if(fb) fb.innerHTML=`<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;padding:10px 14px;font-weight:700;color:#155724">${msg}</div>`;
-  showToast(msg,'success');
-
-  // Beep de éxito
-  try{
-    const ac=new(window.AudioContext||window.webkitAudioContext)();
-    [880,1100,1320].forEach((f,i)=>{
-      const o=ac.createOscillator(),g=ac.createGain();
-      o.connect(g);g.connect(ac.destination);
-      o.frequency.value=f;
-      g.gain.setValueAtTime(0.12,ac.currentTime+i*0.12);
-      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+i*0.12+0.2);
-      o.start(ac.currentTime+i*0.12);o.stop(ac.currentTime+i*0.12+0.2);
-    });
-  }catch(e){}
-}
-
-// También actualizar importarSincDia para usar _aplicarSincDia
-function importarSincDia(input) {
-  const file=input.files[0];if(!file)return;
-  const label=document.getElementById('sincImportLabel');
-  if(label)label.textContent=file.name;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const sync=JSON.parse(e.target.result);
-      if(sync.version!=='sync_v1'){showToast('Archivo no es un sync válido','error');return;}
-      _aplicarSincDia(sync);
-    }catch(err){showToast('Error al leer archivo: '+err.message,'error');}
-    input.value='';
-  };
-  reader.readAsText(file);
-}
-
-</script>
-<script>
-// Service Worker deshabilitado (requiere sw.js en el servidor)
-
-function _aplicarSincDia(sync) {
-  let calMerged=0, asistMerged=0, gruposMerged=0;
-
-  Object.values(sync.grupos).forEach(sg => {
-    let localG = data.groups.find(g => g.id === sg.id);
-    if(!localG){ data.groups.push({...sg}); gruposMerged++; return; }
-
-    Object.keys(sg.grades||{}).forEach(k=>{
-      if(sg.grades[k]!==undefined&&sg.grades[k]!==''){localG.grades[k]=sg.grades[k];calMerged++;}
-    });
-    Object.keys(sg.hwStatus||{}).forEach(k=>{ localG.hwStatus[k]=sg.hwStatus[k]; });
-    Object.keys(sg.conduct||{}).forEach(k=>{
-      if(!localG.conduct[k]||(sg.conduct[k]?.level||0)>(localG.conduct[k]?.level||0))
-        localG.conduct[k]=sg.conduct[k];
-    });
-    const stored=JSON.parse(localStorage.getItem('regCalif_v3')||'{}');
-    if(!stored.asistencia) stored.asistencia={};
-    Object.keys(sg.asistencia||{}).forEach(k=>{
-      stored.asistencia[k]={...(stored.asistencia[k]||{}),...sg.asistencia[k]};
-      asistMerged++;
-    });
-    localStorage.setItem('regCalif_v3',JSON.stringify(stored));
-    gruposMerged++;
-  });
-
-  autoSave();
-  renderMain();
-
-  const fb = document.getElementById('sincScanFeedback');
-  const msg = `✅ ¡Sincronización completa! — ${calMerged} calificaciones, ${asistMerged} registros de asistencia en ${gruposMerged} grupo${gruposMerged!==1?'s':''}`;
-  if(fb) fb.innerHTML=`<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;padding:10px 14px;font-weight:700;color:#155724">${msg}</div>`;
-  showToast(msg,'success');
-
-  // Beep de éxito
-  try{
-    const ac=new(window.AudioContext||window.webkitAudioContext)();
-    [880,1100,1320].forEach((f,i)=>{
-      const o=ac.createOscillator(),g=ac.createGain();
-      o.connect(g);g.connect(ac.destination);
-      o.frequency.value=f;
-      g.gain.setValueAtTime(0.12,ac.currentTime+i*0.12);
-      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+i*0.12+0.2);
-      o.start(ac.currentTime+i*0.12);o.stop(ac.currentTime+i*0.12+0.2);
-    });
-  }catch(e){}
-}
-
-// También actualizar importarSincDia para usar _aplicarSincDia
-function importarSincDia(input) {
-  const file=input.files[0];if(!file)return;
-  const label=document.getElementById('sincImportLabel');
-  if(label)label.textContent=file.name;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const sync=JSON.parse(e.target.result);
-      if(sync.version!=='sync_v1'){showToast('Archivo no es un sync válido','error');return;}
-      _aplicarSincDia(sync);
-    }catch(err){showToast('Error al leer archivo: '+err.message,'error');}
-    input.value='';
-  };
-  reader.readAsText(file);
-}
-
 </script>
 </body>
 </html>
