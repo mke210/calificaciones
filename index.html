@@ -104,8 +104,11 @@
 
   .table-container { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; }
   .table-wrap { overflow-x: auto; overflow-y: auto; background: white; max-height: calc(100vh - 260px); }
-  .table-wrap::-webkit-scrollbar:horizontal { display: none; }
-  .table-hscroll { overflow-x: auto; overflow-y: hidden; background: #ede8dc; border-top: 1.5px solid var(--border); position: sticky; bottom: 0; z-index: 10; }
+  .table-wrap::-webkit-scrollbar { height: 10px; }
+  .table-wrap::-webkit-scrollbar-track { background: #ede8dc; border-radius: 5px; }
+  .table-wrap::-webkit-scrollbar-thumb { background: #a09880; border-radius: 5px; }
+  .table-wrap::-webkit-scrollbar-thumb:hover { background: #7a6a50; }
+  .table-hscroll { overflow-x: auto; overflow-y: hidden; background: #ede8dc; border-top: 1.5px solid var(--border); position: sticky; bottom: 0; z-index: 10; height: 14px; }
   .table-hscroll-inner { height: 1px; }
   /* Scrollbar vertical en table-wrap */
   .table-wrap::-webkit-scrollbar { width: 10px; }
@@ -140,8 +143,8 @@
   tr:hover td:nth-child(2) { background: #faf8f4; }
   tr:last-child td { border-bottom: none; }
 
-  th.conduct-th { background: #2a1a0e; width: 100px; min-width: 100px; max-width: 100px; padding: 8px 10px; vertical-align: middle; text-align: center; }
-  td.conduct-td { background: var(--conduct-bg); border-left: 2px solid var(--conduct-border); width: 100px; min-width: 100px; max-width: 100px; }
+  th.conduct-th { background: #2a1a0e; width: 32px; min-width: 32px; max-width: 36px; padding: 4px 2px; vertical-align: bottom; }
+  td.conduct-td { background: var(--conduct-bg); border-left: 2px solid var(--conduct-border); width: 32px; min-width: 32px; max-width: 36px; }
   tr:hover td.conduct-td { background: #fff0dc; }
   /* override sticky background for conduct and dark footer rows */
   tr:hover td:first-child.conduct-td { background: #fff0dc; }
@@ -799,7 +802,7 @@ function renderGradesTab(container) {
   g.activities.forEach(a => {
     html += `<th class="act-col"><div class="act-header-wrap"><div class="act-header-inner"><input class="col-header-input" value="${escHtml(a.name)}" onblur="renameActivity('${a.id}',this.value)" title="${escHtml(a.name)}" /></div></div></th>`;
   });
-  html += `<th class="center" style="background:#2a3a2a;width:72px;min-width:72px;max-width:80px;padding:4px 2px;font-size:0.58rem;line-height:1.2">Calificación final</th><th class="conduct-th" style="text-align:center;vertical-align:middle;"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.2"><span>Conducta</span><span>🚨</span></div></th><th style="width:44px;min-width:44px;text-align:center;vertical-align:middle;padding:4px 2px;font-size:0.78rem;color:#aaa" title="Activar / Pausar alumno">⏸</th></tr></thead><tbody>`;
+  html += `<th class="center" style="background:#2a3a2a;width:32px;min-width:32px;max-width:36px;padding:4px 2px;vertical-align:bottom;"><div style="display:flex;align-items:flex-end;justify-content:center;height:122px;"><div style="writing-mode:vertical-lr;white-space:nowrap;font-size:0.68rem;letter-spacing:0.03em;font-weight:600;line-height:1;color:#a0e0b0;">Calificación final</div></div></th><th class="conduct-th" style="vertical-align:bottom;padding:4px 2px;width:32px;min-width:32px;max-width:36px;"><div style="display:flex;align-items:flex-end;justify-content:center;height:122px;"><div style="writing-mode:vertical-lr;white-space:nowrap;font-size:0.68rem;letter-spacing:0.03em;font-weight:600;line-height:1;color:#f0c080;">Conducta 🚨</div></div></th><th style="width:44px;min-width:44px;text-align:center;vertical-align:middle;padding:4px 2px;font-size:0.78rem;color:#aaa" title="Activar / Pausar alumno">⏸</th></tr></thead><tbody>`;
 
   g.students.forEach((s, sIdx) => {
     const inactive = !!s.inactive;
@@ -808,7 +811,7 @@ function renderGradesTab(container) {
     const incidents = cData.incidents || [];
     const rowStyle = inactive ? 'opacity:0.42;background:#f8f6f2;' : '';
     const nameStyle = inactive ? 'text-decoration:line-through;color:#aaa;' : '';
-    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}<button onclick="editQRCode('${s.id}')" title="${s.qrCode?'QR asignado: '+s.qrCode:'Asignar código QR externo'}" style="margin-left:5px;background:${s.qrCode?'#e0f0e8':'#f5f0e8'};border:1px solid ${s.qrCode?'#a0d0a8':'#d0c8b8'};border-radius:4px;padding:1px 5px;cursor:pointer;font-size:0.7rem;color:${s.qrCode?'#2a6a3a':'#999'}">${s.qrCode?'📷 '+s.qrCode:'📷 +QR'}</button></td>`;
+    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}<span onclick="editQRCode('${s.id}')" title="${s.qrCode?'QR: '+s.qrCode:'Asignar código QR'}" style="margin-left:5px;display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.qrCode?'#2a7a4b':'#ddd'};cursor:pointer;vertical-align:middle" ></span></td>`;
     g.activities.forEach(a => {
       const key = s.id+'_'+a.id;
       const val = g.grades[key]!==undefined ? g.grades[key] : '';
@@ -846,7 +849,7 @@ function renderGradesTab(container) {
       : 'background:#fff8e6;color:#7a5a00;border:1.5px solid #e8d5a0;';
     const isManual = g.manualAvg && g.manualAvg[s.id] !== undefined && g.manualAvg[s.id] !== '';
     const manualDot = isManual ? `<span title="Promedio manual" style="display:block;width:5px;height:5px;border-radius:50%;background:var(--gold);margin:1px auto 0;"></span>` : '';
-    html += `<td class="center avg-cell" style="width:52px;min-width:52px;max-width:52px;padding:4px 2px;cursor:pointer;" data-avg="${s.id}" onclick="openAvgEdit('${s.id}',this)" title="Clic para editar promedio"><span class="grade-badge ${cls}" style="font-size:0.75rem;padding:2px 5px">${inactive?'—':avgStr}</span>${inactive?'':manualDot}</td>
+    html += `<td class="center avg-cell" style="width:32px;min-width:32px;max-width:36px;padding:4px 2px;cursor:pointer;" data-avg="${s.id}" onclick="openAvgEdit('${s.id}',this)" title="Clic para editar promedio"><span class="grade-badge ${cls}" style="font-size:0.85rem;padding:3px 8px;font-weight:700">${inactive?'—':avgStr}</span>${inactive?'':manualDot}</td>
       <td class="conduct-td" style="text-align:center;padding:6px 4px"><div style="display:flex;align-items:center;justify-content:center;gap:3px">${inactive?'':conductCell}${inactive?'':`<button class="conduct-edit-btn" onclick="openConduct('${s.id}')" title="Editar conducta" style="font-size:0.75rem;padding:1px 3px">✏️</button>`}</div></td>
       <td style="padding:4px;text-align:center"><div style="display:flex;flex-direction:column;gap:3px;align-items:center"><button title="${pauseTitle}" onclick="toggleStudentActive('${s.id}')" style="border:none;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:0.9rem;${pauseStyle}">${pauseIcon}</button><button title="Eliminar alumno" onclick="deleteStudentConfirm('${s.id}')" style="border:1.5px solid #f5c6cb;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:0.9rem;background:#fff0f0;color:#c8422a;">🗑️</button></div></td></tr>`;
   });
@@ -1539,6 +1542,56 @@ function renderSettingsTab(container) {
       <button onclick="exportData()" style="padding:8px 18px;background:var(--ink);color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">⬆️ Exportar JSON</button>
       <label style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">⬇️ Importar JSON<input type="file" accept=".json" style="display:none" onchange="importData(event)"></label>
       <span style="font-size:0.7rem;color:#aaa">Útil para respaldo o cambio de dispositivo</span>
+    </div>
+  </div>
+
+  <!-- ══ SINCRONIZACIÓN DIARIA ════════════════════════════════════════ -->
+  <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
+    <div style="background:linear-gradient(135deg,#1a3a5a,#2a5a8a);padding:12px 20px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:1.2rem">🔄</span>
+      <div style="flex:1">
+        <div style="font-family:'DM Serif Display',serif;font-size:1rem;color:white">Sincronización Diaria</div>
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:1px">Tableta → Laptop · Solo cambios de hoy · Sin WiFi requerido</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.15);border-radius:20px;padding:3px 10px;font-size:0.7rem;color:rgba(255,255,255,0.8);font-weight:700" id="syncDayBadge">Hoy: ${new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'})}</div>
+    </div>
+
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+
+      <!-- Info de cambios de hoy -->
+      <div id="syncDayInfo" style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:8px;padding:12px 16px;font-size:0.82rem;color:#1a2a5a">
+        <div style="font-weight:700;margin-bottom:4px">📊 Calculando cambios de hoy...</div>
+      </div>
+
+      <!-- Dos métodos -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+
+        <!-- Método A: JSON pequeño -->
+        <div style="border:1.5px solid #c0d8c0;border-radius:10px;padding:14px;background:#f8fff8">
+          <div style="font-weight:700;font-size:0.88rem;color:#1a4a1a;margin-bottom:4px">📄 Método A — Archivo</div>
+          <div style="font-size:0.72rem;color:#555;margin-bottom:10px;line-height:1.4">Genera un JSON pequeño solo con los cambios de hoy. Mándalo por WhatsApp a ti mismo o pásalo por USB.</div>
+          <button onclick="exportarSincDia()" style="width:100%;padding:8px;background:#2a7a4b;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">⬇️ Exportar cambios de hoy</button>
+        </div>
+
+        <!-- Método B: QR -->
+        <div style="border:1.5px solid #c0c8e0;border-radius:10px;padding:14px;background:#f8f9ff">
+          <div style="font-weight:700;font-size:0.88rem;color:#1a1a4a;margin-bottom:4px">📷 Método B — QR</div>
+          <div style="font-size:0.72rem;color:#555;margin-bottom:10px;line-height:1.4">Muestra QRs en pantalla. Escanéalos desde la laptop con la cámara. Ideal si no hay cable ni WhatsApp.</div>
+          <button onclick="mostrarQRSincDia()" style="width:100%;padding:8px;background:#2a4a8a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ver QRs de hoy</button>
+        </div>
+      </div>
+
+      <!-- Importar en laptop -->
+      <div style="border:1.5px solid #e0d0c0;border-radius:10px;padding:14px;background:#fffaf5">
+        <div style="font-weight:700;font-size:0.88rem;color:#4a2a00;margin-bottom:4px">📥 Importar en la laptop</div>
+        <div style="font-size:0.72rem;color:#555;margin-bottom:10px;line-height:1.4">Abre la app en la laptop, ve a Ajustes → Sincronización Diaria y sube el archivo JSON recibido. Los cambios se fusionan automáticamente sin borrar nada.</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <div style="flex:1;padding:8px 14px;background:#f5f0e8;border:1.5px solid var(--border);border-radius:6px;font-size:0.8rem;color:#888" id="sincImportLabel">Seleccionar archivo sync_*.json...</div>
+          <input type="file" accept=".json" style="display:none" onchange="importarSincDia(this)">
+          <button onclick="this.previousElementSibling.previousElementSibling.nextElementSibling.click()" style="padding:8px 16px;background:#b85c00;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">📂 Abrir</button>
+        </label>
+      </div>
+
     </div>
   </div>
 
@@ -2909,6 +2962,30 @@ function shareWhatsApp(sid) {
   if (cLev>0) {
     msg += `🚨 *CONDUCTA: ${clabels[cLev]}*\n`;
     incidents.forEach(inc=>{ msg+=`• ${inc.date}: ${inc.text}\n`; });
+    msg += '\n';
+  }
+
+  // Tardanzas del alumno con motivos
+  const _asistData = JSON.parse(localStorage.getItem('regCalif_v3')||'{}').asistencia || {};
+  const prefix = g.id + '_';
+  const tardanzas = [];
+  Object.keys(_asistData).filter(k=>k.startsWith(prefix)).forEach(k=>{
+    const fecha = k.slice(prefix.length);
+    const rec = _asistData[k];
+    if(rec[sid]==='tarde'){
+      const motivo = rec[sid+'_motivo'] || '';
+      tardanzas.push({fecha, motivo});
+    }
+  });
+  if(tardanzas.length){
+    tardanzas.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    msg += `⏰ *TARDANZAS (${tardanzas.length})*\n`;
+    tardanzas.forEach(t=>{
+      const d = new Date(t.fecha+'T12:00:00');
+      const fechaFmt = d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      msg += `• ${fechaFmt}${t.motivo?' — '+t.motivo:''}\n`;
+    });
+    msg += '\n';
   }
 
   const encoded = encodeURIComponent(msg);
@@ -2958,8 +3035,9 @@ function renderAsistenciaTab(container){
       <button onclick="imprimirQRs()" style="padding:6px 14px;background:var(--ink);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">🖨️ Imprimir QRs</button>
     </div>
 
-    ${unassigned>0?`<div style="background:#fff8e6;border:1.5px solid #f0c060;border-radius:8px;padding:10px 16px;font-size:0.82rem;color:#7a5a00;display:flex;align-items:center;gap:10px">
-      ⚠️ <strong>${unassigned} alumno${unassigned!==1?'s':''}</strong> sin código QR asignado. Ve a la pestaña <strong>📊 Calificaciones</strong> y toca el botón <strong>📷 +QR</strong> junto a cada nombre para asignar los códigos de la otra app.
+    ${unassigned>0?`<div style="background:#fff8e6;border:1.5px solid #f0c060;border-radius:8px;padding:10px 16px;font-size:0.82rem;color:#7a5a00;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div>⚠️ <strong>${unassigned} alumno${unassigned!==1?'s':''}</strong> sin código QR externo asignado en este dispositivo. Si ya los asignaste antes, solo necesitas volver a asignarlos aquí una vez — los datos se guardan en este navegador. También puedes tomar asistencia manualmente con los botones ✅⏰❌.</div>
+      <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:#7a5a00;flex-shrink:0">✕</button>
     </div>`:''}
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
@@ -3031,7 +3109,7 @@ function renderAsistenciaTab(container){
           <tbody>
           ${g.students.filter(s=>!s.inactive).map((s,i)=>{
             const st=rec[s.id]||'';
-            const badge=st==='presente'?'<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✅ Presente</span>':st==='ausente'?'<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">❌ Ausente</span>':st==='tarde'?'<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde</span>':'<span style="background:#f0f0f0;color:#aaa;padding:3px 12px;border-radius:20px;font-weight:600;font-size:0.78rem">— Sin marcar</span>';
+            const badge=st==='presente'?'<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✅ Presente</span>':st==='ausente'?'<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">❌ Ausente</span>':st==='tarde'?(()=>{const mot=rec[s.id+'_motivo'];return '<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde'+(mot?' — '+escHtml(mot):'')+'</span>';})():'<span style="background:#f0f0f0;color:#aaa;padding:3px 12px;border-radius:20px;font-weight:600;font-size:0.78rem">— Sin marcar</span>';
             const qrTag=s.qrCode?`<span style="background:#e0f0e8;color:#2a6a3a;padding:2px 7px;border-radius:10px;font-size:0.72rem;font-weight:700">${escHtml(s.qrCode)}</span>`:'<span style="color:#ddd;font-size:0.72rem">—</span>';
             return `<tr style="${i%2===0?'':'background:#faf8f4'}" id="asistRow_${s.id}">
               <td style="padding:8px 14px;color:#aaa;font-size:0.78rem">${i+1}</td>
@@ -3040,7 +3118,7 @@ function renderAsistenciaTab(container){
               <td style="padding:8px 14px;text-align:center" id="asistBadge_${s.id}">${badge}</td>
               <td style="padding:8px 14px;text-align:center"><div style="display:flex;gap:4px;justify-content:center">
                 <button onclick="setAsist('${s.id}','presente')" title="Presente" style="padding:4px 9px;background:${st==='presente'?'#2a7a4b':'#f0f0f0'};color:${st==='presente'?'white':'#555'};border:none;border-radius:5px;cursor:pointer;font-size:0.85rem">✅</button>
-                <button onclick="setAsist('${s.id}','tarde')"   title="Tarde"    style="padding:4px 9px;background:${st==='tarde'?'#b85c00':'#f0f0f0'};color:${st==='tarde'?'white':'#555'};border:none;border-radius:5px;cursor:pointer;font-size:0.85rem">⏰</button>
+                <button onclick="anotarTarde('${s.id}')" title="Tarde — anotar motivo" style="padding:4px 9px;background:${st==='tarde'?'#b85c00':'#f0f0f0'};color:${st==='tarde'?'white':'#555'};border:none;border-radius:5px;cursor:pointer;font-size:0.85rem">⏰</button>
                 <button onclick="setAsist('${s.id}','ausente')" title="Ausente"  style="padding:4px 9px;background:${st==='ausente'?'#c8422a':'#f0f0f0'};color:${st==='ausente'?'white':'#555'};border:none;border-radius:5px;cursor:pointer;font-size:0.85rem">❌</button>
               </div></td>
             </tr>`;
@@ -3061,9 +3139,11 @@ function setAsist(sid,estado){
   const key=_asistKey(g.id,_asist.fecha);
   if(!_asist.records[key])_asist.records[key]={};
   _asist.records[key][sid]=estado;
+  // Si cambia de tarde a otro estado, limpiar el motivo
+  if(estado!=='tarde') delete _asist.records[key][sid+'_motivo'];
   _saveAsist();
   const s=g.students.find(x=>x.id===sid);
-  const badges={presente:'<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✅ Presente</span>',ausente:'<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">❌ Ausente</span>',tarde:'<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde</span>'};
+  const badges={presente:'<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✅ Presente</span>',ausente:'<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">❌ Ausente</span>',tarde:(()=>{const mot=rec[s.id+'_motivo'];return '<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde'+(mot?' — '+escHtml(mot):'')+'</span>';})()};
   const badgeEl=document.getElementById('asistBadge_'+sid);
   if(badgeEl)badgeEl.innerHTML=badges[estado]||'';
   const fb=document.getElementById('asistLastScan');
@@ -3223,17 +3303,166 @@ function exportarAsistencia(){
   const g=currentGroup();if(!g)return;
   _loadAsist();
   const prefix=g.id+'_';
-  const fechas=Object.keys(_asist.records).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length)).sort();
-  if(!fechas.length){showToast('No hay registros de asistencia','error');return;}
-  let csv='Alumno,'+fechas.join(',')+'\n';
-  g.students.filter(s=>!s.inactive).forEach(s=>{
-    const row=[s.name,...fechas.map(f=>{const r=_asist.records[g.id+'_'+f]||{};return r[s.id]||'sin marcar';})];
-    csv+=row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')+'\n';
+  const todFechas=Object.keys(_asist.records).filter(k=>k.startsWith(prefix)&&!k.includes('_motivo')).map(k=>k.slice(prefix.length)).sort();
+  if(!todFechas.length){showToast('No hay registros de asistencia para exportar','error');return;}
+
+  const ex=document.getElementById('exportAsistModal');if(ex)ex.remove();
+  const modal=document.createElement('div');
+  modal.id='exportAsistModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
+  const fechaMin=todFechas[0],fechaMax=todFechas[todFechas.length-1];
+  const meses=[...new Set(todFechas.map(f=>f.slice(0,7)))].sort();
+  const anios=[...new Set(todFechas.map(f=>f.slice(0,4)))].sort();
+  modal.innerHTML=`
+    <div style="background:white;border-radius:12px;padding:26px 28px 22px;width:480px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
+      <div style="font-family:'DM Serif Display',serif;font-size:1.15rem;margin-bottom:6px">📊 Exportar Reporte de Asistencia</div>
+      <div style="font-size:0.8rem;color:#888;margin-bottom:20px">${g.name} — Registros: ${fechaMin} al ${fechaMax}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:2px">Período a exportar</div>
+        <label id="optDia" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:2px solid var(--green);border-radius:8px;cursor:pointer">
+          <input type="radio" name="expP" value="dia" checked style="accent-color:var(--green)">
+          <div><div style="font-weight:700;font-size:0.88rem">📅 Por día</div><div style="font-size:0.72rem;color:#888">Lista completa de un día específico</div></div>
+          <select id="exportDia" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem">
+            ${todFechas.map(f=>{const d=new Date(f+'T12:00');return `<option value="${f}">${d.toLocaleDateString('es-MX',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</option>`;}).join('')}
+          </select>
+        </label>
+        <label id="optMes" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="document.getElementById('optDia').style.borderWidth='1.5px';document.getElementById('optDia').style.borderColor='var(--border)';this.style.border='2px solid var(--blue)'">
+          <input type="radio" name="expP" value="mes" style="accent-color:var(--blue)">
+          <div><div style="font-weight:700;font-size:0.88rem">📆 Por mes</div><div style="font-size:0.72rem;color:#888">Todas las clases del mes, columna por día</div></div>
+          <select id="exportMes" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem">
+            ${meses.map(m=>{const[y,mo]=m.split('-');const n=new Date(y,mo-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});return `<option value="${m}">${n.charAt(0).toUpperCase()+n.slice(1)}</option>`;}).join('')}
+          </select>
+        </label>
+        <label id="optAnio" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="document.getElementById('optDia').style.border='1.5px solid var(--border)';document.getElementById('optMes').style.border='1.5px solid var(--border)';this.style.border='2px solid var(--orange)'">
+          <input type="radio" name="expP" value="anio" style="accent-color:var(--orange)">
+          <div><div style="font-weight:700;font-size:0.88rem">📋 Año completo</div><div style="font-size:0.72rem;color:#888">Resumen con totales y porcentaje por alumno</div></div>
+          <select id="exportAnio" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem">
+            ${anios.map(a=>`<option value="${a}">${a}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="document.getElementById('exportAsistModal').remove()" style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
+        <button onclick="_generarExcelAsistencia()" style="padding:8px 22px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">📥 Descargar Excel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+
+function _generarExcelAsistencia(){
+  const g=currentGroup();if(!g)return;
+  _loadAsist();
+  const periodo=document.querySelector('input[name=expP]:checked')?.value||'mes';
+  const prefix=g.id+'_';
+  const todFechas=Object.keys(_asist.records).filter(k=>k.startsWith(prefix)&&!k.includes('_motivo')).map(k=>k.slice(prefix.length)).sort();
+  const alumnos=g.students.filter(s=>!s.inactive);
+  let fechas=todFechas, titulo='', archivo='';
+  if(periodo==='dia'){
+    const dia=document.getElementById('exportDia').value;
+    fechas=[dia];
+    const d=new Date(dia+'T12:00');
+    titulo=d.toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+    titulo=titulo.charAt(0).toUpperCase()+titulo.slice(1);
+    archivo=`asistencia_dia_${dia}`;
+  } else if(periodo==='mes'){
+    const mes=document.getElementById('exportMes').value;
+    fechas=todFechas.filter(f=>f.startsWith(mes));
+    const[y,mo]=mes.split('-');
+    const n=new Date(y,mo-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    titulo='Asistencia — '+n.charAt(0).toUpperCase()+n.slice(1);
+    archivo=`asistencia_mes_${mes}`;
+  } else {
+    const anio=document.getElementById('exportAnio').value;
+    fechas=todFechas.filter(f=>f.startsWith(anio));
+    titulo=`Reporte Anual de Asistencia ${anio}`;
+    archivo=`asistencia_anio_${anio}`;
+  }
+  if(!fechas.length){showToast('No hay registros en el período seleccionado','error');return;}
+
+  const iconos={presente:'✅',ausente:'❌',tarde:'⏰'};
+  const bgColor={presente:'#d4edda',ausente:'#f8d7da',tarde:'#ffe5cc'};
+  const fgColor={presente:'#155724',ausente:'#721c24',tarde:'#7a3a00'};
+
+  // Calcular totales
+  const tots=alumnos.map(s=>{
+    let p=0,a=0,t=0;
+    fechas.forEach(f=>{const r=_asist.records[prefix+f]||{};if(r[s.id]==='presente')p++;else if(r[s.id]==='ausente')a++;else if(r[s.id]==='tarde')t++;});
+    return{p,a,t};
   });
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-  a.download=`asistencia_${g.name.replace(/[^a-z0-9]/gi,'_')}.csv`;a.click();URL.revokeObjectURL(url);
-  showToast('📥 CSV exportado','success');
+
+  // Build Excel-compatible HTML table
+  let html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Asistencia</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><style>
+body{font-family:Arial,sans-serif;font-size:10pt}table{border-collapse:collapse}
+th{background:#1a3a2a;color:white;font-weight:bold;padding:6px 8px;border:1px solid #aaa;text-align:center;font-size:8.5pt;vertical-align:bottom}
+th.nh{background:#1a1a2e;text-align:left}th.tot{background:#2a4a3a}
+td{padding:5px 8px;border:1px solid #ddd;font-size:9pt;vertical-align:middle}
+td.n{font-weight:600;color:#1a1a2e;background:#f8f6f0}td.c{text-align:center;font-weight:600}
+.tt{font-size:13pt;font-weight:bold;color:#1a1a2e;margin-bottom:3px}.st{font-size:9.5pt;color:#555;margin-bottom:12px}
+</style></head><body>
+<p class="tt">📋 ${titulo}</p>
+<p class="st">Grupo: <b>${g.name}</b>${g.subject?' — '+g.subject:''} &nbsp;|&nbsp; Alumnos: <b>${alumnos.length}</b> &nbsp;|&nbsp; Días: <b>${fechas.length}</b> &nbsp;|&nbsp; Generado: ${new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'})}</p>
+<table><thead><tr><th class="nh" style="min-width:180px">#&nbsp; Alumno</th>`;
+
+  fechas.forEach(f=>{
+    const d=new Date(f+'T12:00');
+    const dw=d.toLocaleDateString('es-MX',{weekday:'short'}).replace('.','');
+    const dm=d.getDate();
+    const mn=d.toLocaleDateString('es-MX',{month:'short'}).replace('.','');
+    html+=`<th style="min-width:46px;width:46px;font-size:7.5pt">${dw}<br>${dm}<br>${mn}</th>`;
+  });
+  html+=`<th class="tot" style="min-width:44px">✅<br>Pres.</th><th class="tot" style="min-width:44px">❌<br>Aus.</th><th class="tot" style="min-width:44px">⏰<br>Tarde</th><th class="tot" style="min-width:54px">%<br>Asist.</th></tr></thead><tbody>`;
+
+  alumnos.forEach((s,i)=>{
+    html+=`<tr><td class="n">${i+1}&nbsp; ${s.name}</td>`;
+    fechas.forEach(f=>{
+      const r=_asist.records[prefix+f]||{};
+      const st=r[s.id]||'';
+      const mot=st==='tarde'?(r[s.id+'_motivo']||''):'';
+      html+=`<td class="c" style="background:${bgColor[st]||'#fff'};color:${fgColor[st]||'#bbb'}" title="${mot?'Motivo: '+mot:''}">${st?iconos[st]:'—'}</td>`;
+    });
+    const tot=tots[i];
+    const pct=fechas.length>0?Math.round(tot.p/fechas.length*100):0;
+    html+=`<td class="c" style="background:#e8f5e9">${tot.p}</td><td class="c" style="background:#fce8e8">${tot.a}</td><td class="c" style="background:#fff3e0">${tot.t}</td><td class="c" style="background:${pct>=80?'#c8e6c9':pct>=60?'#fff9c4':'#ffcdd2'};font-weight:bold">${pct}%</td></tr>`;
+  });
+
+  // Fila totales grupo
+  html+=`<tr style="background:#e8e4dc;font-weight:bold"><td class="n" style="font-weight:bold">TOTAL GRUPO</td>`;
+  fechas.forEach(f=>{
+    const r=_asist.records[prefix+f]||{};
+    let p=0,a=0,t=0;
+    alumnos.forEach(s=>{if(r[s.id]==='presente')p++;else if(r[s.id]==='ausente')a++;else if(r[s.id]==='tarde')t++;});
+    html+=`<td class="c" style="font-size:7.5pt;background:#e8f0e8">P${p}<br>A${a}<br>T${t}</td>`;
+  });
+  const tP=tots.reduce((s,x)=>s+x.p,0),tA=tots.reduce((s,x)=>s+x.a,0),tT=tots.reduce((s,x)=>s+x.t,0);
+  const tPct=alumnos.length*fechas.length>0?Math.round(tP/(alumnos.length*fechas.length)*100):0;
+  html+=`<td class="c" style="background:#a5d6a7">${tP}</td><td class="c" style="background:#ef9a9a">${tA}</td><td class="c" style="background:#ffcc80">${tT}</td><td class="c" style="background:#81c784;font-size:11pt">${tPct}%</td></tr></tbody></table>`;
+
+  // Tardanzas con motivos
+  const tardDet=[];
+  alumnos.forEach(s=>{
+    fechas.forEach(f=>{
+      const r=_asist.records[prefix+f]||{};
+      if(r[s.id]==='tarde'&&r[s.id+'_motivo']){
+        const d=new Date(f+'T12:00');
+        tardDet.push({n:s.name,f:d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),m:r[s.id+'_motivo']});
+      }
+    });
+  });
+  if(tardDet.length){
+    html+=`<br><p style="font-size:11pt;font-weight:bold;color:#7a3a00;margin:16px 0 8px">⏰ Detalle de Tardanzas</p><table style="width:auto"><thead><tr><th style="background:#7a3a00;min-width:180px;text-align:left">Alumno</th><th style="background:#7a3a00;min-width:110px">Fecha</th><th style="background:#7a3a00;min-width:260px;text-align:left">Motivo del retardo</th></tr></thead><tbody>`;
+    tardDet.forEach((t,i)=>{html+=`<tr style="background:${i%2===0?'#fff8f0':'#fff3e8'}"><td style="font-weight:600;padding:5px 8px">${t.n}</td><td style="text-align:center;padding:5px 8px">${t.f}</td><td style="color:#7a3a00;font-style:italic;padding:5px 8px">${t.m}</td></tr>`;});
+    html+=`</tbody></table>`;
+  }
+  html+=`<p style="font-size:8.5pt;color:#999;margin-top:16px">✅ Presente &nbsp;❌ Ausente &nbsp;⏰ Tarde &nbsp;— &nbsp;Sin registro</p></body></html>`;
+
+  const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`${archivo}_${g.name.replace(/[^a-z0-9]/gi,'_')}.xls`;
+  a.click();URL.revokeObjectURL(url);
+  document.getElementById('exportAsistModal').remove();
+  showToast('📊 Reporte Excel generado correctamente','success');
 }
 
 // ── ASIGNAR CÓDIGO QR EXTERNO ──────────────────────────────────
@@ -3344,6 +3573,332 @@ window._decodeQRForAssign=function(sid,file){
     };img.src=url;
   });
 };
+
+
+// ── ANOTAR MOTIVO DE TARDANZA ─────────────────────────────────────
+function anotarTarde(sid) {
+  const g = currentGroup(); if(!g) return;
+  const s = g.students.find(x=>x.id===sid); if(!s) return;
+  const key = _asistKey(g.id, _asist.fecha);
+  _loadAsist();
+  if(!_asist.records[key]) _asist.records[key]={};
+  const motivoActual = _asist.records[key][sid+'_motivo'] || '';
+
+  const ex = document.getElementById('tardeModal'); if(ex) ex.remove();
+  const modal = document.createElement('div');
+  modal.id = 'tardeModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:12px;padding:26px 28px 22px;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:1.4rem">⏰</span>
+        <div style="font-family:'DM Serif Display',serif;font-size:1.15rem">Registrar Tardanza</div>
+      </div>
+      <div style="font-size:0.82rem;color:#888;margin-bottom:18px">
+        <strong>${escHtml(s.name)}</strong> — ${_asist.fecha}
+      </div>
+
+      <label style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:7px">
+        Motivo del retardo <span style="font-weight:400;color:#aaa">(opcional)</span>
+      </label>
+      <textarea id="tardeMotivo" rows="3" placeholder="Ej: Transporte, cita médica, clima..."
+        style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.92rem;outline:none;resize:vertical;box-sizing:border-box"
+      >${escHtml(motivoActual)}</textarea>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px">
+        ${_asist.records[key][sid]==='tarde' ? `<button onclick="setAsist('${sid}','presente');document.getElementById('tardeModal').remove()" style="padding:7px 14px;background:transparent;color:#2a7a4b;border:1.5px solid #2a7a4b;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">↩ Cambiar a presente</button>` : '<div></div>'}
+        <div style="display:flex;gap:8px">
+          <button onclick="document.getElementById('tardeModal').remove()" style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
+          <button onclick="_guardarTarde('${sid}')" style="padding:8px 20px;background:#b85c00;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">⏰ Guardar tardanza</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+  setTimeout(()=>{ const t=document.getElementById('tardeMotivo'); if(t){t.focus();t.selectionStart=t.value.length;} }, 80);
+}
+
+function _guardarTarde(sid) {
+  _loadAsist();
+  const g = currentGroup(); if(!g) return;
+  const key = _asistKey(g.id, _asist.fecha);
+  if(!_asist.records[key]) _asist.records[key]={};
+  const motivo = (document.getElementById('tardeMotivo')?.value||'').trim();
+  _asist.records[key][sid] = 'tarde';
+  if(motivo) _asist.records[key][sid+'_motivo'] = motivo;
+  else delete _asist.records[key][sid+'_motivo'];
+  _saveAsist();
+  document.getElementById('tardeModal').remove();
+
+  // Actualizar badge en tabla
+  const s = g.students.find(x=>x.id===sid);
+  const badgeEl = document.getElementById('asistBadge_'+sid);
+  if(badgeEl) badgeEl.innerHTML = '<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde'+(motivo?' — '+escHtml(motivo):'')+'</span>';
+
+  // Feedback
+  const fb = document.getElementById('asistLastScan');
+  const nm = document.getElementById('asistLastName');
+  const dt = document.getElementById('asistLastDetail');
+  const ic = document.getElementById('asistLastIcon');
+  if(fb&&nm&&dt&&ic){
+    fb.style.display='flex'; fb.style.background='#fff8e6'; fb.style.borderColor='#f0c060';
+    nm.textContent = s?s.name:sid;
+    ic.textContent = '⏰';
+    dt.textContent = 'Tardanza' + (motivo?' — '+motivo:'') + ' ('+_asist.fecha+')';
+  }
+
+  // Beep de tono diferente para tardanza
+  try{
+    const ac=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ac.createOscillator();const gn=ac.createGain();
+    o.connect(gn);gn.connect(ac.destination);
+    o.frequency.value=660;gn.gain.setValueAtTime(0.12,ac.currentTime);
+    gn.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.3);
+    o.start();o.stop(ac.currentTime+0.3);
+  }catch(e){}
+
+  showToast(`⏰ ${s?s.name:sid} — Tardanza registrada`+(motivo?` (${motivo})`:''),'');
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// SINCRONIZACIÓN DIARIA
+// ════════════════════════════════════════════════════════════════════
+
+function _getSyncHoy() {
+  const hoy = new Date().toISOString().slice(0,10);
+  const cambios = { fecha: hoy, version: 'sync_v1', grupos: {} };
+  let totalCambios = 0;
+
+  data.groups.forEach(g => {
+    const grpCambios = { grades: {}, hwStatus: {}, conduct: {}, asistencia: {} };
+    let hayCambios = false;
+
+    // Calificaciones modificadas hoy
+    // Usamos el campo _lastEdit si existe, o incluimos todas (fallback seguro)
+    Object.keys(g.grades||{}).forEach(k => {
+      if (g.grades[k] !== undefined && g.grades[k] !== '') {
+        grpCambios.grades[k] = g.grades[k];
+        hayCambios = true; totalCambios++;
+      }
+    });
+
+    // Tareas de hoy
+    Object.keys(g.hwStatus||{}).forEach(k => {
+      grpCambios.hwStatus[k] = g.hwStatus[k];
+      hayCambios = true;
+    });
+
+    // Conducta
+    Object.keys(g.conduct||{}).forEach(k => {
+      grpCambios.conduct[k] = g.conduct[k];
+      hayCambios = true;
+    });
+
+    // Asistencia de hoy
+    const asistData = JSON.parse(localStorage.getItem('regCalif_v3')||'{}').asistencia || {};
+    const keyHoy = g.id + '_' + hoy;
+    if (asistData[keyHoy]) {
+      grpCambios.asistencia[keyHoy] = asistData[keyHoy];
+      hayCambios = true;
+    }
+
+    if (hayCambios) {
+      cambios.grupos[g.id] = {
+        id: g.id, name: g.name, subject: g.subject || '',
+        students: g.students, // incluir alumnos para que laptop reconozca IDs
+        ...grpCambios
+      };
+    }
+  });
+
+  cambios.totalCambios = totalCambios;
+  return cambios;
+}
+
+function _renderSyncInfo() {
+  const el = document.getElementById('syncDayInfo');
+  if (!el) return;
+  const hoy = new Date().toISOString().slice(0,10);
+  const sync = _getSyncHoy();
+  const nGrupos = Object.keys(sync.grupos).length;
+  const nCal = sync.totalCambios;
+  const asistData = JSON.parse(localStorage.getItem('regCalif_v3')||'{}').asistencia || {};
+  const nAsist = Object.keys(asistData).filter(k=>k.endsWith('_'+hoy)).length;
+
+  el.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px;color:#1a2a5a">📊 Datos disponibles para sincronizar</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div><span style="font-size:1.2rem;font-weight:700;color:#2a5a8a">${nGrupos}</span> <span style="font-size:0.78rem;color:#555">grupo${nGrupos!==1?'s':''}</span></div>
+      <div><span style="font-size:1.2rem;font-weight:700;color:#2a7a4b">${nCal}</span> <span style="font-size:0.78rem;color:#555">calificaciones</span></div>
+      <div><span style="font-size:1.2rem;font-weight:700;color:#b85c00">${nAsist}</span> <span style="font-size:0.78rem;color:#555">registros asistencia</span></div>
+    </div>
+    ${nGrupos===0?'<div style="margin-top:6px;font-size:0.78rem;color:#888">Registra calificaciones o asistencia primero.</div>':''}
+  `;
+}
+
+// Llamar cuando se entra a ajustes
+const _origRenderSettings = window.renderSettingsTab;
+
+function exportarSincDia() {
+  const sync = _getSyncHoy();
+  if (Object.keys(sync.grupos).length === 0) {
+    showToast('No hay datos para sincronizar hoy', 'error'); return;
+  }
+  const json = JSON.stringify(sync, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sync_${sync.fecha}_${new Date().getHours()}h${String(new Date().getMinutes()).padStart(2,'0')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📄 Archivo de sincronización listo — mándalo por WhatsApp o USB', 'success');
+}
+
+function mostrarQRSincDia() {
+  const sync = _getSyncHoy();
+  if (Object.keys(sync.grupos).length === 0) {
+    showToast('No hay datos para mostrar', 'error'); return;
+  }
+
+  // Comprimir y dividir en chunks para QR
+  const json = JSON.stringify(sync);
+  const CHUNK = 800;
+  const chunks = [];
+  for (let i = 0; i < json.length; i += CHUNK) chunks.push(json.slice(i, i+CHUNK));
+
+  const ex = document.getElementById('sincQRModal'); if(ex) ex.remove();
+  const modal = document.createElement('div');
+  modal.id = 'sincQRModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
+
+  modal.innerHTML = `
+    <div style="color:white;text-align:center">
+      <div style="font-family:'DM Serif Display',serif;font-size:1.3rem;margin-bottom:4px">📷 QRs de Sincronización</div>
+      <div style="font-size:0.8rem;opacity:0.7">Escanea cada QR en orden desde la laptop</div>
+    </div>
+    <div id="sincQRContainer" style="background:white;border-radius:12px;padding:20px;text-align:center;min-width:260px">
+      <div id="sincQRCode" style="display:flex;justify-content:center;margin-bottom:12px"></div>
+      <div id="sincQRLabel" style="font-size:0.9rem;font-weight:700;color:#1a1a2e;margin-bottom:4px"></div>
+      <div id="sincQRSub" style="font-size:0.75rem;color:#888;margin-bottom:14px"></div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button id="sincQRPrev" onclick="_sincQRNav(-1)" style="padding:7px 18px;background:#f5f0e8;color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">← Anterior</button>
+        <button id="sincQRNext" onclick="_sincQRNav(1)"  style="padding:7px 18px;background:#2a4a8a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">Siguiente →</button>
+      </div>
+    </div>
+    <button onclick="document.getElementById('sincQRModal').remove()" style="color:white;background:none;border:1.5px solid rgba(255,255,255,0.4);border-radius:6px;padding:8px 20px;font-family:inherit;font-size:0.85rem;cursor:pointer">✕ Cerrar</button>
+  `;
+  document.body.appendChild(modal);
+
+  window._sincChunks = chunks;
+  window._sincQRIdx = 0;
+  _renderSincQR();
+}
+
+function _renderSincQR() {
+  const chunks = window._sincChunks;
+  const idx = window._sincQRIdx;
+  const total = chunks.length;
+  const payload = JSON.stringify({i:idx, t:total, d:chunks[idx]});
+
+  const container = document.getElementById('sincQRCode');
+  container.innerHTML = '';
+  const div = document.createElement('div');
+  container.appendChild(div);
+
+  _cargarQRCode(() => {
+    new QRCode(div, {text:payload, width:220, height:220, colorDark:'#1a1a2e', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M});
+  });
+
+  document.getElementById('sincQRLabel').textContent = `QR ${idx+1} de ${total}`;
+  document.getElementById('sincQRSub').textContent = idx===total-1 ? '✅ Último QR' : `Escanea este, luego toca Siguiente →`;
+  document.getElementById('sincQRPrev').style.opacity = idx===0?'0.3':'1';
+  document.getElementById('sincQRNext').textContent = idx===total-1 ? '✅ Listo' : 'Siguiente →';
+  document.getElementById('sincQRNext').onclick = idx===total-1
+    ? ()=>document.getElementById('sincQRModal').remove()
+    : ()=>_sincQRNav(1);
+}
+
+function _sincQRNav(dir) {
+  window._sincQRIdx = Math.max(0, Math.min(window._sincChunks.length-1, window._sincQRIdx+dir));
+  _renderSincQR();
+}
+
+function _cargarQRCode(cb) {
+  if(window.QRCode){cb();return;}
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload=cb; document.head.appendChild(s);
+}
+
+function importarSincDia(input) {
+  const file = input.files[0]; if(!file) return;
+  const label = document.getElementById('sincImportLabel');
+  if(label) label.textContent = file.name;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const sync = JSON.parse(e.target.result);
+      if(sync.version !== 'sync_v1') { showToast('Archivo no es un sync válido', 'error'); return; }
+
+      let calMerged=0, asistMerged=0, gruposMerged=0;
+
+      Object.values(sync.grupos).forEach(sg => {
+        // Buscar grupo correspondiente en datos locales
+        let localG = data.groups.find(g => g.id === sg.id);
+        if(!localG) {
+          // Si no existe, crear el grupo
+          data.groups.push({...sg});
+          gruposMerged++; return;
+        }
+
+        // Fusionar calificaciones — solo sobreescribe si hay valor nuevo
+        Object.keys(sg.grades||{}).forEach(k => {
+          if(sg.grades[k] !== undefined && sg.grades[k] !== '') {
+            localG.grades[k] = sg.grades[k];
+            calMerged++;
+          }
+        });
+
+        // Fusionar tareas
+        Object.keys(sg.hwStatus||{}).forEach(k => { localG.hwStatus[k] = sg.hwStatus[k]; });
+
+        // Fusionar conducta
+        Object.keys(sg.conduct||{}).forEach(k => {
+          if(!localG.conduct[k] || (sg.conduct[k]?.level||0) > (localG.conduct[k]?.level||0)) {
+            localG.conduct[k] = sg.conduct[k];
+          }
+        });
+
+        // Fusionar asistencia
+        const stored = JSON.parse(localStorage.getItem('regCalif_v3')||'{}');
+        if(!stored.asistencia) stored.asistencia = {};
+        Object.keys(sg.asistencia||{}).forEach(k => {
+          stored.asistencia[k] = {...(stored.asistencia[k]||{}), ...sg.asistencia[k]};
+          asistMerged++;
+        });
+        localStorage.setItem('regCalif_v3', JSON.stringify(stored));
+
+        gruposMerged++;
+      });
+
+      autoSave();
+      renderMain();
+
+      showToast(`✅ Sincronización completa — ${calMerged} calificaciones, ${asistMerged} registros de asistencia en ${gruposMerged} grupo${gruposMerged!==1?'s':''}`, 'success');
+
+    } catch(err) {
+      showToast('Error al leer el archivo: ' + err.message, 'error');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+// Inicializar info cuando se carga la sección
+setTimeout(()=>_renderSyncInfo(), 500);
 
 </script>
 </body>
