@@ -2101,14 +2101,20 @@ function printReporteFinal(){
 // ── Estado global del módulo P2P ─────────────────────────────────────────
 const P2P = {
   peer:       null,   // instancia PeerJS
-  conn:       null,   // DataConnection activa
-  myId:       null,   // ID de este dispositivo (persistido en localStorage)
-  remoteId:   null,   // ID del dispositivo remoto (persistido en localStorage)
-  status:     'idle', // 'idle' | 'loading' | 'ready' | 'connecting' | 'connected' | 'error'
-  lastSync:   null,   // timestamp de última sincronización exitosa
-  autoRetry:  null,   // setTimeout handle para reconexión automática
-  autoSync:   true,   // enviar automáticamente al guardar calificación
+  conns:      [],     // POOL de DataConnections activas (puede haber >1 por doble-connect)
+  conn:       null,   // alias de conveniencia → primera conexión abierta del pool
+  myId:       null,
+  remoteId:   null,
+  status:     'idle',
+  lastSync:   null,
+  autoRetry:  null,
+  autoSync:   true,
 };
+
+// Devuelve la primera conexión abierta del pool (la usamos para enviar)
+function _p2pGetOpenConn() {
+  return P2P.conns.find(c => c && c.open) || null;
+}
 
 const P2P_STORAGE_KEY = 'regCalif_p2p_v1'; // clave en localStorage
 
@@ -2266,12 +2272,11 @@ function p2pConectar(remoteId) {
   _p2pConfigConn(conn);
 }
 
-// ── Configurar DataConnection (compartida para inbound y outbound) ────────
-// CRÍTICO: PeerJS recibe conexiones entrantes con serialization:'json' por defecto.
-// Para unificar, el receptor acepta la conexión y la envuelve aquí.
-// El canal de datos usa strings comprimidos con prefijo 'P2P:' en ambas direcciones.
+// ── Configurar DataConnection — registra en el pool ──────────────────────
 function _p2pConfigConn(conn) {
-  P2P.conn = conn;
+  // Evitar duplicados en el pool
+  if (!P2P.conns.includes(conn)) P2P.conns.push(conn);
+  P2P.conn = conn; // alias para compatibilidad
 
   conn.on('open', () => {
     if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
@@ -2283,36 +2288,27 @@ function _p2pConfigConn(conn) {
   });
 
   conn.on('data', raw => {
-    // raw puede ser string (serialization:raw) u objeto (serialization:json)
     let payload = null;
-
     if (typeof raw === 'object' && raw !== null) {
       payload = raw;
     } else if (typeof raw === 'string') {
       if (raw.startsWith('P2P:')) {
-        try {
-          payload = JSON.parse(LZString.decompressFromBase64(raw.slice(4)));
-        } catch(e) { showToast('Error al descomprimir: ' + e.message, 'error'); }
+        try { payload = JSON.parse(LZString.decompressFromBase64(raw.slice(4))); }
+        catch(e) { showToast('Error al descomprimir: ' + e.message, 'error'); }
       } else {
         try { payload = JSON.parse(raw); } catch(e) {}
       }
     }
-
     if (!payload) return;
-
-    // La laptop pide datos → la tablet responde con todo automáticamente
-    if (payload.type === 'request_all') {
-      _p2pResponderPeticion();
-      return;
-    }
-
-    // Datos recibidos normales
+    if (payload.type === 'request_all') { _p2pResponderPeticion(); return; }
     _p2pAplicarPayload(payload);
   });
 
   conn.on('close', () => {
-    if (P2P.conn === conn) {
-      P2P.conn = null;
+    // Eliminar del pool al cerrar
+    P2P.conns = P2P.conns.filter(c => c !== conn);
+    P2P.conn  = _p2pGetOpenConn();
+    if (!P2P.conn) {
       p2pSetStatus('ready', 'Desconectado del par');
       p2pRefreshUI();
       if (P2P.remoteId) p2pScheduleRetry();
@@ -2320,6 +2316,8 @@ function _p2pConfigConn(conn) {
   });
 
   conn.on('error', err => {
+    P2P.conns = P2P.conns.filter(c => c !== conn);
+    P2P.conn  = _p2pGetOpenConn();
     p2pSetStatus('error', 'Error de conexión: ' + err.message);
     p2pRefreshUI();
   });
@@ -2340,7 +2338,7 @@ function p2pScheduleRetry(delayMs = 8000) {
 // Llamado desde saveGradeFromPopup cuando autoSync está activo.
 // Envía SOLO la calificación modificada (payload mínimo).
 function p2pEnviarCalificacion(groupId, key, value) {
-  if (!P2P.autoSync || !P2P.conn || !P2P.conn.open) return;
+  if (!P2P.autoSync || !_p2pGetOpenConn()) return;
 
   const g = data.groups.find(x => x.id === groupId);
   if (!g) return;
@@ -2385,7 +2383,7 @@ function p2pToggleAutoSync() {
 
 // ── Enviar calificaciones al par ──────────────────────────────────────────
 function p2pSincronizarAhora() {
-  if (!P2P.conn || !P2P.conn.open) {
+  if (!_p2pGetOpenConn()) {
     showToast('⚠️ Sin conexión activa — verifica que el otro dispositivo esté abierto', 'error');
     return;
   }
@@ -2414,7 +2412,7 @@ function p2pSincronizarAhora() {
 // ── Enviar TODAS las calificaciones (sin filtro de fecha) ─────────────────
 // Úsalo cuando la laptop no tiene datos que sí existen en la tablet.
 function p2pEnviarTodo() {
-  if (!P2P.conn || !P2P.conn.open) {
+  if (!_p2pGetOpenConn()) {
     showToast('⚠️ Sin conexión activa — verifica que el otro dispositivo esté abierto', 'error');
     return;
   }
@@ -2486,7 +2484,7 @@ function _p2pResponderPeticion() {
 // ── La laptop pide los datos a la tablet ──────────────────────────────────
 // Un solo botón: la laptop envía la petición y espera la respuesta.
 function p2pPedirDatos() {
-  if (!P2P.conn || !P2P.conn.open) {
+  if (!_p2pGetOpenConn()) {
     showToast('⚠️ Sin conexión — abre la app en la tablet primero', 'error');
     return;
   }
@@ -2510,18 +2508,16 @@ function _p2pAplicarPayload(payload) {
   }
 }
 
-// ── Función de envío unificada (maneja raw y json) ────────────────────────
-// Intenta enviar como string comprimido; si falla, envía objeto JSON directo.
+// ── Función de envío unificada — usa cualquier conexión abierta del pool ──
 function _p2pSend(payloadObj) {
-  if (!P2P.conn || !P2P.conn.open) return false;
+  const conn = _p2pGetOpenConn();
+  if (!conn) return false;
   try {
-    const json       = JSON.stringify(payloadObj);
-    const compressed = 'P2P:' + LZString.compressToBase64(json);
-    P2P.conn.send(compressed);
+    const compressed = 'P2P:' + LZString.compressToBase64(JSON.stringify(payloadObj));
+    conn.send(compressed);
     return true;
   } catch(e) {
-    // Fallback: enviar objeto directamente (funciona con serialization:json)
-    try { P2P.conn.send(payloadObj); return true; } catch(e2) {}
+    try { conn.send(payloadObj); return true; } catch(e2) {}
     return false;
   }
 }
@@ -2529,8 +2525,10 @@ function _p2pSend(payloadObj) {
 // ── Desconectar y olvidar el ID remoto ───────────────────────────────────
 function p2pDesconectar() {
   if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
-  if (P2P.conn)  { try { P2P.conn.close(); } catch(e){} P2P.conn = null; }
-  if (P2P.peer)  { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
+  P2P.conns.forEach(c => { try { c.close(); } catch(e){} });
+  P2P.conns = [];
+  P2P.conn  = null;
+  if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
   P2P.remoteId = null;
   P2P.myId     = null;
   P2P.status   = 'idle';
@@ -2585,7 +2583,7 @@ function p2pRefreshUI() {
     error:      { color: '#7a1010', bg: '#fff0f0',  icon: '🔴', label: 'Error' },
   };
   const si = statusInfo[P2P.status] || statusInfo.idle;
-  const connected = P2P.status === 'connected';
+  const connected = P2P.status === 'connected' && !!_p2pGetOpenConn();
   const hasRemote = !!P2P.remoteId;
   const myId      = P2P.myId || '—';
 
@@ -2774,7 +2772,9 @@ function p2pRefreshUI() {
 // ── Olvidar ID remoto (para cambiar de par) ───────────────────────────────
 function p2pOlvidarRemoto() {
   if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
-  if (P2P.conn) { try { P2P.conn.close(); } catch(e){} P2P.conn = null; }
+  P2P.conns.forEach(c => { try { c.close(); } catch(e){} });
+  P2P.conns = [];
+  P2P.conn  = null;
   P2P.remoteId = null;
   p2pSaveState();
   p2pSetStatus('ready', 'Par olvidado · Ingresa el nuevo ID');
