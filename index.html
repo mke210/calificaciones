@@ -1167,7 +1167,16 @@ function init() {
   });
 }
 
-function saveAll() { localStorage.setItem('regCalif_v3', JSON.stringify(data)); showToast('✅ Guardado correctamente', 'success'); }
+function saveAll() {
+  localStorage.setItem('regCalif_v3', JSON.stringify(data));
+  // ── Sincronización al guardar ─────────────────────────────────────
+  const conn = _p2pGetOpenConn ? _p2pGetOpenConn() : null;
+  if (conn && P2P && P2P.autoSync) {
+    _p2pEnviarAlGuardar();
+  } else {
+    showToast('💾 Guardado correctamente', 'success');
+  }
+}
 
 // ---- HISTORIAL DE DESHACER ----
 const _undoStack = [];    // snapshots JSON anteriores al cambio
@@ -2109,6 +2118,7 @@ const P2P = {
   lastSync:   null,
   autoRetry:  null,
   autoSync:   true,
+  syncLog:    [],     // historial de sincronizaciones [{ts, dir, n, from}]
 };
 
 // Devuelve la primera conexión abierta del pool (la usamos para enviar)
@@ -2126,6 +2136,7 @@ function p2pLoadState() {
     P2P.remoteId  = s.remoteId  || null;
     P2P.lastSync  = s.lastSync  || null;
     P2P.autoSync  = s.autoSync !== false; // true por defecto
+    P2P.syncLog   = s.syncLog   || [];
   } catch(e) {}
 }
 
@@ -2135,6 +2146,7 @@ function p2pSaveState() {
     remoteId: P2P.remoteId,
     lastSync: P2P.lastSync,
     autoSync: P2P.autoSync,
+    syncLog:  P2P.syncLog.slice(-20), // max 20 entradas
   }));
 }
 
@@ -2378,7 +2390,7 @@ function p2pToggleAutoSync() {
   P2P.autoSync = !P2P.autoSync;
   p2pSaveState();
   p2pRefreshUI();
-  showToast(P2P.autoSync ? '🟢 Auto-sync activado' : '⏸ Auto-sync pausado', 'success');
+  showToast(P2P.autoSync ? '🟢 Sincronización al guardar: activada' : '⏸ Sincronización al guardar: desactivada', 'success');
 }
 
 // ── Enviar calificaciones al par ──────────────────────────────────────────
@@ -2498,11 +2510,27 @@ function _p2pAplicarPayload(payload) {
 
   try {
     _aplicarSincDia(payload.sync);
-    P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    P2P.lastSync = hora;
+    // Registrar en el log
+    const nGrupos = Object.keys(payload.sync.grupos || {}).length;
+    const from = payload.senderLabel || payload.sender || 'otro dispositivo';
+    P2P.syncLog.push({
+      ts: hora,
+      dir: 'recibido',
+      n: payload.sync.totalCambios || 0,
+      grupos: nGrupos,
+      from,
+    });
     p2pSaveState();
     p2pRefreshUI();
+    // Refrescar la vista si está en calificaciones o ajustes
+    if (currentTab === 'calificaciones' || currentTab === 'ajustes') {
+      renderTab();
+    }
     const lastEl = document.getElementById('p2pLastSyncLabel');
-    if (lastEl) lastEl.textContent = '✅ Último envío: ' + P2P.lastSync;
+    if (lastEl) lastEl.textContent = '✅ Última sync: ' + hora;
+    showToast(`📥 ${from} guardó y sincronizó ${nGrupos} grupo(s)`, 'success');
   } catch(e) {
     showToast('Error al aplicar datos: ' + e.message, 'error');
   }
@@ -2521,6 +2549,56 @@ function _p2pSend(payloadObj) {
     return false;
   }
 }
+
+// ── Enviar TODAS las calificaciones al hacer clic en GUARDAR ─────────────
+// Nueva función principal: se llama desde saveAll() cuando hay conexión activa.
+function _p2pEnviarAlGuardar() {
+  const syncCompleto = {
+    version: 'sync_v1',
+    fecha:   new Date().toISOString().slice(0, 10),
+    grupos:  {},
+    totalCambios: 0,
+  };
+
+  data.groups.forEach(g => {
+    const nGrades = Object.keys(g.grades || {}).length;
+    syncCompleto.grupos[g.id] = {
+      id: g.id, name: g.name, subject: g.subject || '',
+      students:  g.students,
+      grades:    { ...g.grades },
+      hwStatus:  { ...g.hwStatus },
+      conduct:   { ...g.conduct },
+      asistencia: {},
+    };
+    syncCompleto.totalCambios += nGrades;
+  });
+
+  const payloadObj = {
+    type: 'sync_grades', version: 'sync_v1',
+    timestamp: Date.now(), sender: P2P.myId,
+    senderLabel: P2P.myId || 'Este dispositivo',
+    sync: syncCompleto,
+  };
+
+  if (_p2pSend(payloadObj)) {
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    P2P.lastSync = hora;
+    // Agregar al log
+    P2P.syncLog.push({
+      ts: hora,
+      dir: 'enviado',
+      n: syncCompleto.totalCambios,
+      grupos: Object.keys(syncCompleto.grupos).length,
+    });
+    p2pSaveState();
+    p2pRefreshUI();
+    const nG = Object.keys(syncCompleto.grupos).length;
+    showToast(`💾 Guardado · 📤 Enviado a ${P2P.remoteId || 'dispositivo conectado'} (${nG} grupos)`, 'success');
+  } else {
+    showToast('💾 Guardado localmente · ⚠️ Sin conexión para sincronizar', 'success');
+  }
+}
+
 
 // ── Desconectar y olvidar el ID remoto ───────────────────────────────────
 function p2pDesconectar() {
@@ -2577,7 +2655,7 @@ function p2pRefreshUI() {
   const statusInfo = {
     idle:       { color: '#888',    bg: '#f5f5f5',  icon: '⚪', label: 'Inactivo' },
     loading:    { color: '#b85c00', bg: '#fff8f0',  icon: '⏳', label: 'Cargando…' },
-    ready:      { color: '#5a6e00', bg: '#f5fff0',  icon: '🟡', label: 'Listo (sin par)' },
+    ready:      { color: '#5a6e00', bg: '#f5fff0',  icon: '🟡', label: 'Esperando conexión' },
     connecting: { color: '#2a4a9a', bg: '#f0f4ff',  icon: '🔄', label: 'Conectando…' },
     connected:  { color: '#155724', bg: '#e8f8ee',  icon: '🟢', label: 'Conectado' },
     error:      { color: '#7a1010', bg: '#fff0f0',  icon: '🔴', label: 'Error' },
@@ -2587,170 +2665,164 @@ function p2pRefreshUI() {
   const hasRemote = !!P2P.remoteId;
   const myId      = P2P.myId || '—';
 
+  // Generar historial de sincronizaciones
+  const logHTML = P2P.syncLog.length ? P2P.syncLog.slice().reverse().slice(0,6).map(entry => {
+    const isEnv = entry.dir === 'enviado';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f0f0">
+      <span style="font-size:0.88rem">${isEnv ? '📤' : '📥'}</span>
+      <div style="flex:1;font-size:0.75rem">
+        <span style="color:${isEnv ? '#155724' : '#1a3a6a'};font-weight:600">${isEnv ? 'Tú guardaste' : 'Recibido de ' + (entry.from || 'otro dispositivo')}</span>
+        <span style="color:#aaa"> · ${entry.grupos || 0} grupo(s) · ${entry.n || 0} cal.</span>
+      </div>
+      <span style="font-size:0.7rem;color:#bbb;white-space:nowrap">${entry.ts}</span>
+    </div>`;
+  }).join('') : `<div style="color:#bbb;font-size:0.78rem;text-align:center;padding:10px 0">Sin sincronizaciones recientes</div>`;
+
   panel.innerHTML = `
-    <!-- Estado de conexión -->
-    <div style="background:${si.bg};border:1.5px solid ${si.color}33;border-radius:10px;
-                padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:${connected?'14px':'0'}">
-      <span style="font-size:1.4rem">${si.icon}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;color:${si.color};font-size:0.88rem">${si.label}</div>
-        <div style="font-size:0.75rem;color:#666;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          ${P2P._statusMsg || ''}
+    <!-- ══ ESTADO DE DISPOSITIVOS CONECTADOS ══ -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px">
+        Estado de dispositivos conectados
+      </div>
+
+      <!-- Este dispositivo -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f8f8;border:1.5px solid #e0e0e0;border-radius:10px;margin-bottom:6px">
+        <span style="font-size:1.1rem">💻</span>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:0.85rem;color:#1a1a2e">Este dispositivo</div>
+          <code style="font-size:0.72rem;color:#888">${myId}</code>
         </div>
-      </div>
-    </div>
-
-    ${connected ? `
-    <!-- ═══ BOTONES PRINCIPALES (solo cuando conectado) ═══ -->
-
-    <!-- 1. LAPTOP: Traer datos de la tablet (PULL) -->
-    <button onclick="p2pPedirDatos()"
-      style="width:100%;padding:16px;margin-top:14px;
-             background:linear-gradient(135deg,#1a3a6a,#2a5a9a);
-             color:white;border:none;border-radius:12px;font-family:inherit;
-             font-size:1rem;font-weight:700;cursor:pointer;
-             box-shadow:0 4px 14px rgba(26,58,106,0.4);
-             display:flex;align-items:center;justify-content:center;gap:10px">
-      <span style="font-size:1.4rem">🔄</span>
-      <div style="text-align:left">
-        <div>Actualizar laptop desde tablet</div>
-        <div style="font-size:0.72rem;font-weight:400;opacity:0.8;margin-top:1px">
-          La tablet envía todas sus calificaciones aquí
-        </div>
-      </div>
-    </button>
-
-    <!-- 2. TABLET: Enviar datos a la laptop (PUSH) -->
-    <button onclick="p2pEnviarTodo()"
-      style="width:100%;padding:12px;margin-top:10px;
-             background:#155724;
-             color:white;border:none;border-radius:10px;font-family:inherit;
-             font-size:0.88rem;font-weight:700;cursor:pointer;
-             box-shadow:0 2px 8px rgba(21,87,36,0.3);
-             display:flex;align-items:center;justify-content:center;gap:8px">
-      <span style="font-size:1.1rem">📤</span>
-      <div style="text-align:left">
-        <div>Enviar todo desde esta tablet</div>
-        <div style="font-size:0.7rem;font-weight:400;opacity:0.8;margin-top:1px">
-          Presiona esto si estás en la tablet
-        </div>
-      </div>
-    </button>
-
-    <!-- Última sincronización + auto-sync -->
-    <div style="display:flex;align-items:center;justify-content:space-between;
-                margin-top:12px;padding:10px 14px;
-                background:${P2P.autoSync ? '#f0fff4' : '#fafafa'};
-                border:1.5px solid ${P2P.autoSync ? '#a0ddb0' : '#ddd'};
-                border-radius:10px">
-      <div>
-        <div style="font-weight:700;font-size:0.82rem;color:${P2P.autoSync ? '#155724' : '#666'}">
-          ${P2P.autoSync ? '⚡ Auto-sync activo' : '⏸ Auto-sync pausado'}
-        </div>
-        <div id="p2pLastSyncLabel" style="font-size:0.7rem;color:#777;margin-top:1px">
-          ${P2P.lastSync ? '✅ Última sync: ' + P2P.lastSync : 'Sin sincronizaciones recientes'}
-        </div>
-      </div>
-      <button onclick="p2pToggleAutoSync()"
-        style="padding:6px 14px;background:${P2P.autoSync ? '#155724' : '#888'};color:white;
-               border:none;border-radius:20px;font-family:inherit;font-size:0.78rem;
-               font-weight:700;cursor:pointer;white-space:nowrap">
-               font-weight:700;cursor:pointer;white-space:nowrap;min-width:64px;
-               transition:background 0.2s">
-        ${P2P.autoSync ? 'ON' : 'OFF'}
-      </button>
-    </div>
-    ` : ''}
-
-    <!-- Mi ID -->
-    <div style="margin-bottom:12px">
-      <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">
-        Mi ID (este dispositivo)
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <code style="flex:1;background:#f0f0f0;border:1.5px solid #ddd;border-radius:7px;
-                     padding:8px 12px;font-size:0.8rem;color:#1a1a2e;overflow:hidden;
-                     text-overflow:ellipsis;white-space:nowrap;display:block">
-          ${myId}
-        </code>
-        <button onclick="p2pCopiarMiId()" ${P2P.myId ? '' : 'disabled'}
-          style="padding:8px 12px;background:${P2P.myId ? 'var(--ink)' : '#ccc'};
-                 color:white;border:none;border-radius:7px;font-family:inherit;
-                 font-size:0.78rem;font-weight:700;cursor:${P2P.myId ? 'pointer' : 'default'};
-                 white-space:nowrap">
-          📋 Copiar
-        </button>
-      </div>
-      <div style="font-size:0.7rem;color:#aaa;margin-top:4px">
-        Comparte este ID con el otro dispositivo (solo una vez)
-      </div>
-    </div>
-
-    <!-- ID del par remoto -->
-    <div style="margin-bottom:14px">
-      <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">
-        ID del otro dispositivo
-      </div>
-      ${connected || hasRemote ? `
-        <div style="display:flex;align-items:center;gap:8px">
-          <code style="flex:1;background:#f0fff4;border:1.5px solid ${connected ? '#a0ddb0' : '#ddd'};
-                       border-radius:7px;padding:8px 12px;font-size:0.8rem;color:#1a2a1e;
-                       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">
-            ${P2P.remoteId}
-          </code>
-          <button onclick="p2pOlvidarRemoto()"
-            style="padding:8px 10px;background:#f8f0f0;color:#aa3333;border:1.5px solid #ffcccc;
-                   border-radius:7px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">
-            ✕ Cambiar
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="width:8px;height:8px;border-radius:50%;background:#22cc55;display:inline-block"></span>
+          <span style="font-size:0.72rem;color:#155724;font-weight:600">Activo</span>
+          <button onclick="p2pCopiarMiId()" ${P2P.myId ? '' : 'disabled'}
+            style="padding:4px 10px;background:var(--ink);color:white;border:none;border-radius:5px;
+                   font-family:inherit;font-size:0.72rem;font-weight:700;cursor:pointer;margin-left:4px">
+            📋 Copiar ID
           </button>
         </div>
-        ${P2P.lastSync ? `<div style="font-size:0.7rem;color:#155724;margin-top:4px">✅ Última sincronización: ${P2P.lastSync}</div>` : ''}
+      </div>
+
+      <!-- Dispositivo remoto -->
+      ${hasRemote || connected ? `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                  background:${connected ? '#f0fff4' : '#fff8f0'};
+                  border:1.5px solid ${connected ? '#a0ddb0' : '#f0c080'};border-radius:10px">
+        <span style="font-size:1.1rem">📱</span>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:0.85rem;color:#1a1a2e">Otro dispositivo</div>
+          <code style="font-size:0.72rem;color:#888">${P2P.remoteId || '—'}</code>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="width:8px;height:8px;border-radius:50%;background:${connected ? '#22cc55' : '#f0a500'};display:inline-block"></span>
+          <span style="font-size:0.72rem;color:${connected ? '#155724' : '#b85c00'};font-weight:600">${connected ? 'Conectado' : 'Sin conexión'}</span>
+          <button onclick="p2pOlvidarRemoto()"
+            style="padding:4px 8px;background:#fff0f0;color:#aa3333;border:1px solid #ffcccc;
+                   border-radius:5px;font-family:inherit;font-size:0.7rem;cursor:pointer;margin-left:4px">
+            ✕
+          </button>
+        </div>
+      </div>
       ` : `
-        <div style="display:flex;gap:8px;align-items:center">
-          <input id="p2pRemoteIdInput" type="text" placeholder="Pega aquí el ID del otro dispositivo"
-            style="flex:1;padding:8px 12px;border:1.5px solid #ccc;border-radius:7px;
-                   font-family:inherit;font-size:0.82rem;outline:none;
-                   transition:border-color 0.2s"
+      <div style="padding:10px 14px;background:#fafafa;border:1.5px dashed #ddd;border-radius:10px">
+        <div style="font-size:0.78rem;color:#888;margin-bottom:8px">Conectar otro dispositivo — ingresa su ID:</div>
+        <div style="display:flex;gap:8px">
+          <input id="p2pRemoteIdInput" type="text" placeholder="ej: rc-k7m3x"
+            style="flex:1;padding:7px 12px;border:1.5px solid #ccc;border-radius:7px;
+                   font-family:inherit;font-size:0.82rem;outline:none"
             onfocus="this.style.borderColor='#2a4a9a'"
             onblur="this.style.borderColor='#ccc'"
             onkeydown="if(event.key==='Enter') p2pGuardarIdRemoto()">
           <button onclick="p2pGuardarIdRemoto()"
-            style="padding:8px 14px;background:var(--ink);color:white;border:none;border-radius:7px;
+            style="padding:7px 16px;background:var(--ink);color:white;border:none;border-radius:7px;
                    font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">
             🔗 Conectar
           </button>
         </div>
-        <div style="font-size:0.7rem;color:#aaa;margin-top:4px">
-          Copia el ID que aparece en el otro dispositivo y pégalo aquí
-        </div>
+        <div style="font-size:0.7rem;color:#aaa;margin-top:5px">Abre la app en el otro dispositivo y copia el ID que aparece arriba.</div>
+      </div>
       `}
     </div>
 
-    <!-- Instrucciones colapsables -->
-    <details style="font-size:0.78rem;color:#555;border:1px solid #e0e0e0;border-radius:8px;padding:0">
+    <!-- ══ OPCIONES DE SINCRONIZACIÓN ══ -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px">
+        Opciones de sincronización
+      </div>
+
+      <!-- Toggle: sincronizar al guardar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:11px 14px;background:${P2P.autoSync ? '#f0fff4' : '#fafafa'};
+                  border:1.5px solid ${P2P.autoSync ? '#a0ddb0' : '#ddd'};border-radius:10px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:700;font-size:0.85rem;color:${P2P.autoSync ? '#155724' : '#555'}">
+            ✅ Sincronizar automáticamente al guardar
+          </div>
+          <div style="font-size:0.72rem;color:#888;margin-top:2px">
+            Al hacer clic en 💾 Guardar, todos los dispositivos conectados se actualizan
+          </div>
+        </div>
+        <button onclick="p2pToggleAutoSync()"
+          style="padding:7px 18px;background:${P2P.autoSync ? '#155724' : '#aaa'};color:white;
+                 border:none;border-radius:20px;font-family:inherit;font-size:0.82rem;
+                 font-weight:700;cursor:pointer;white-space:nowrap;min-width:56px;
+                 transition:background 0.2s">
+          ${P2P.autoSync ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      ${connected ? `
+      <!-- Sincronizar manualmente ahora -->
+      <button onclick="_p2pEnviarAlGuardar()"
+        style="width:100%;padding:11px;background:linear-gradient(135deg,#1a3a6a,#2a5a9a);
+               color:white;border:none;border-radius:10px;font-family:inherit;
+               font-size:0.88rem;font-weight:700;cursor:pointer;
+               display:flex;align-items:center;justify-content:center;gap:8px;
+               box-shadow:0 2px 8px rgba(26,58,106,0.3)">
+        <span>📤</span> Sincronizar ahora (sin esperar al guardar)
+      </button>
+      ` : `
+      <div style="padding:10px 14px;background:#fff8f0;border:1.5px solid #f0c080;border-radius:8px;font-size:0.78rem;color:#7a5a00">
+        ⚠️ Conecta el otro dispositivo para habilitar la sincronización
+      </div>
+      `}
+    </div>
+
+    <!-- ══ HISTORIAL DE SINCRONIZACIONES ══ -->
+    <div>
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+        <span>Últimas sincronizaciones</span>
+        ${P2P.syncLog.length ? `<button onclick="P2P.syncLog=[];p2pSaveState();p2pRefreshUI()" style="background:none;border:none;color:#bbb;font-size:0.7rem;cursor:pointer;padding:0">Limpiar</button>` : ''}
+      </div>
+      <div style="background:#fafafa;border:1.5px solid #eee;border-radius:10px;padding:8px 12px">
+        ${logHTML}
+      </div>
+    </div>
+
+    <!-- ══ INSTRUCCIONES ══ -->
+    <details style="font-size:0.78rem;color:#555;border:1px solid #e0e0e0;border-radius:8px;padding:0;margin-top:12px">
       <summary style="padding:9px 14px;cursor:pointer;font-weight:700;color:#444;list-style:none;
                       display:flex;align-items:center;gap:6px">
         <span>❓</span> ¿Cómo funciona?
       </summary>
       <div style="padding:2px 14px 12px;line-height:1.7;border-top:1px solid #e8e8e8;margin-top:2px">
         <ol style="padding-left:18px;display:flex;flex-direction:column;gap:4px;margin:8px 0 0">
-          <li><strong>Primera vez:</strong> abre esta pantalla en los dos dispositivos (tablet y laptop).</li>
-          <li>Copia el <strong>ID</strong> que aparece en la tablet y pégalo en la laptop (o al revés).</li>
+          <li><strong>Primera vez:</strong> abre esta pantalla en los dos dispositivos.</li>
+          <li>Copia tu <strong>ID</strong> y pégalo en el otro dispositivo (o al revés).</li>
           <li>Presiona <strong>Conectar</strong>. El estado cambiará a 🟢 Conectado.</li>
-          <li><strong>Siguiente vez:</strong> la conexión se restablece sola al abrir la app en ambos.</li>
-          <li>Presiona <strong>🔄 Sincronizar ahora</strong> para enviar las calificaciones.</li>
+          <li><strong>Siguiente vez:</strong> la conexión se restablece automáticamente.</li>
+          <li>Cada vez que presiones <strong>💾 Guardar</strong>, los cambios se envían a todos los dispositivos conectados al instante.</li>
         </ol>
         <div style="margin-top:8px;padding:6px 10px;background:#fff8e8;border-radius:6px;
                     border-left:3px solid #f0a500;font-size:0.73rem">
-          💡 Ambos dispositivos necesitan internet (aunque sea mínimo) para la señalización inicial.
-          Los datos viajan directamente entre los dispositivos una vez conectados.
+          💡 Ambos dispositivos necesitan internet para la señalización inicial. Los datos viajan directo entre dispositivos.
         </div>
       </div>
     </details>
 
-    <!-- Botón de emergencia: desactivar -->
+    <!-- Botón desactivar -->
     ${P2P.myId ? `
-      <div style="margin-top:10px;text-align:right">
+      <div style="margin-top:12px;text-align:right">
         <button onclick="p2pDesconectar()"
           style="padding:5px 12px;background:none;color:#aaa;border:1px solid #ddd;
                  border-radius:6px;font-family:inherit;font-size:0.72rem;cursor:pointer">
@@ -2758,7 +2830,7 @@ function p2pRefreshUI() {
         </button>
       </div>
     ` : `
-      <div style="margin-top:10px">
+      <div style="margin-top:12px">
         <button onclick="p2pInit()"
           style="padding:8px 18px;background:var(--ink);color:white;border:none;border-radius:7px;
                  font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">
@@ -2797,10 +2869,10 @@ function renderSettingsTab(container) {
         <span style="font-size:1.5rem">🔗</span>
         <div style="flex:1">
           <div style="font-family:'DM Serif Display',serif;font-size:1.05rem;color:white">
-            Sincronización Tablet ↔ Laptop
+            Sincronización al Guardar
           </div>
           <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:2px">
-            Conexión directa · Sin cables · Calificaciones en tiempo real
+            Al hacer 💾 Guardar, todos los dispositivos conectados se actualizan al instante
           </div>
         </div>
         <div id="p2pStatusDot" style="width:10px;height:10px;border-radius:50%;
@@ -3336,10 +3408,8 @@ function saveGradeFromPopup(sid, aid, dir) {
     if (isNaN(val)) { showToast('Ingresa un número entre 0 y 10','error'); return; }
     val = parseFloat(val.toFixed(1));
     g.grades[key] = val;
-    p2pEnviarCalificacion(g.id, key, val);   // ← auto-sync puntual
   } else {
     delete g.grades[key];
-    p2pEnviarCalificacion(g.id, key, '');    // ← notificar borrado
   }
   autoSave(); closeGradePopup(); refreshGradeCell(sid, aid);
   if (dir) navigateGradeCell(sid, aid, dir);
