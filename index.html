@@ -2242,7 +2242,9 @@ function _p2pCrearPeer(peerId) {
   });
 }
 
-// ── Conectar al dispositivo remoto ───────────────────────────────────────
+// ── Conectar al dispositivo remoto (rol: iniciador) ──────────────────────
+// Solo el dispositivo que ingresó el ID del otro inicia la conexión outbound.
+// El receptor simplemente acepta la conexión en peer.on('connection').
 function p2pConectar(remoteId) {
   if (!remoteId || !P2P.peer) return;
   remoteId = remoteId.trim();
@@ -2258,18 +2260,20 @@ function p2pConectar(remoteId) {
 
   const conn = P2P.peer.connect(remoteId, {
     reliable:      true,
-    serialization: 'raw',   // string nativo — sin límite de tamaño JSON
+    serialization: 'raw',
     label:         'sync',
   });
   _p2pConfigConn(conn);
 }
 
-// ── Configurar DataConnection (recibir + eventos) ────────────────────────
+// ── Configurar DataConnection (compartida para inbound y outbound) ────────
+// CRÍTICO: PeerJS recibe conexiones entrantes con serialization:'json' por defecto.
+// Para unificar, el receptor acepta la conexión y la envuelve aquí.
+// El canal de datos usa strings comprimidos con prefijo 'P2P:' en ambas direcciones.
 function _p2pConfigConn(conn) {
   P2P.conn = conn;
 
   conn.on('open', () => {
-    // Limpiar reintentos pendientes
     if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
     P2P.remoteId = conn.peer;
     p2pSaveState();
@@ -2278,8 +2282,27 @@ function _p2pConfigConn(conn) {
     showToast('🔗 Dispositivo conectado', 'success');
   });
 
-  conn.on('data', payload => {
-    _p2pRecibirDatos(payload);
+  conn.on('data', raw => {
+    // raw puede ser string (serialization:raw) u objeto (serialization:json)
+    // Normalizar ambos casos para máxima compatibilidad
+    if (typeof raw === 'object' && raw !== null) {
+      // Llegó como objeto JSON nativo (conexión entrante con serialization:json)
+      _p2pAplicarPayload(raw);
+    } else if (typeof raw === 'string') {
+      if (raw.startsWith('P2P:')) {
+        // String comprimido con LZString
+        try {
+          const json  = LZString.decompressFromBase64(raw.slice(4));
+          const payload = JSON.parse(json);
+          _p2pAplicarPayload(payload);
+        } catch(e) {
+          showToast('Error al descomprimir: ' + e.message, 'error');
+        }
+      } else {
+        // Intentar parsear como JSON plano
+        try { _p2pAplicarPayload(JSON.parse(raw)); } catch(e) {}
+      }
+    }
   });
 
   conn.on('close', () => {
@@ -2287,7 +2310,6 @@ function _p2pConfigConn(conn) {
       P2P.conn = null;
       p2pSetStatus('ready', 'Desconectado del par');
       p2pRefreshUI();
-      // Intentar reconectar si tenemos ID del remoto
       if (P2P.remoteId) p2pScheduleRetry();
     }
   });
@@ -2336,22 +2358,16 @@ function p2pEnviarCalificacion(groupId, key, value) {
     type: 'sync_grades', version: 'sync_v1',
     timestamp: Date.now(), sender: P2P.myId, sync: miniSync,
   });
-  const compressed = 'P2P:' + LZString.compressToBase64(json);
 
-  try {
-    P2P.conn.send(compressed);
+  if (_p2pSend({ type: 'sync_grades', version: 'sync_v1',
+                 timestamp: Date.now(), sender: P2P.myId, sync: miniSync })) {
     P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     p2pSaveState();
-    // Indicador visual sutil en el dot (no toast para no interrumpir)
     const dot = document.getElementById('p2pStatusDot');
-    if (dot) {
-      dot.style.background = '#ffffff';
-      setTimeout(() => { dot.style.background = '#22cc55'; }, 200);
-    }
-    // Actualizar contador en Ajustes si está visible
+    if (dot) { dot.style.background = '#ffffff'; setTimeout(() => { dot.style.background = '#22cc55'; }, 200); }
     const lastEl = document.getElementById('p2pLastSyncLabel');
     if (lastEl) lastEl.textContent = '✅ Último envío: ' + P2P.lastSync;
-  } catch(e) { /* falla silenciosa — no interrumpir al maestro */ }
+  }
 }
 
 // ── Toggle auto-sync desde Ajustes ───────────────────────────────────────
@@ -2377,19 +2393,16 @@ function p2pSincronizarAhora() {
     return;
   }
 
-  // Serializar y comprimir con LZString para evitar el límite del canal
-  const json = JSON.stringify({ type: 'sync_grades', version: 'sync_v1',
-                                timestamp: Date.now(), sender: P2P.myId, sync });
-  const compressed = 'P2P:' + LZString.compressToBase64(json);
-
-  try {
-    P2P.conn.send(compressed);
+  // Enviar usando función unificada (maneja raw y json automáticamente)
+  const payloadObj = { type: 'sync_grades', version: 'sync_v1',
+                       timestamp: Date.now(), sender: P2P.myId, sync };
+  if (_p2pSend(payloadObj)) {
     P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
     p2pSaveState();
-    showToast(`📤 ${totalCambios} calificaciones enviadas`, 'success');
+    showToast(`📤 ${totalCambios} calificaciones de hoy enviadas`, 'success');
     p2pRefreshUI();
-  } catch(e) {
-    showToast('Error al enviar: ' + e.message, 'error');
+  } else {
+    showToast('Error al enviar — reconecta los dispositivos', 'error');
   }
 }
 
@@ -2429,39 +2442,25 @@ function p2pEnviarTodo() {
     return;
   }
 
-  const json = JSON.stringify({
+  const payloadObj = {
     type: 'sync_grades', version: 'sync_v1',
     timestamp: Date.now(), sender: P2P.myId,
     sync: syncCompleto,
-  });
-  const compressed = 'P2P:' + LZString.compressToBase64(json);
+  };
 
-  try {
-    P2P.conn.send(compressed);
+  if (_p2pSend(payloadObj)) {
     P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
     p2pSaveState();
     const nGrupos = Object.keys(syncCompleto.grupos).length;
     showToast(`📤 ${syncCompleto.totalCambios} calificaciones · ${nGrupos} grupos enviados`, 'success');
     p2pRefreshUI();
-  } catch(e) {
-    showToast('Error al enviar: ' + e.message, 'error');
+  } else {
+    showToast('Error al enviar — reconecta los dispositivos', 'error');
   }
 }
 
-// ── Recibir y aplicar datos del par ──────────────────────────────────────
-function _p2pRecibirDatos(raw) {
-  // Descomprimir string LZ recibido por canal 'raw'
-  if (typeof raw !== 'string' || !raw.startsWith('P2P:')) return;
-
-  let payload;
-  try {
-    const json = LZString.decompressFromBase64(raw.slice(4));
-    payload = JSON.parse(json);
-  } catch(e) {
-    showToast('Error al descomprimir datos: ' + e.message, 'error');
-    return;
-  }
-
+// ── Aplicar payload recibido (independiente del formato de transporte) ────
+function _p2pAplicarPayload(payload) {
   if (!payload || payload.type !== 'sync_grades') return;
 
   try {
@@ -2469,8 +2468,26 @@ function _p2pRecibirDatos(raw) {
     P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
     p2pSaveState();
     p2pRefreshUI();
+    const lastEl = document.getElementById('p2pLastSyncLabel');
+    if (lastEl) lastEl.textContent = '✅ Último envío: ' + P2P.lastSync;
   } catch(e) {
-    showToast('Error al aplicar sincronización: ' + e.message, 'error');
+    showToast('Error al aplicar datos: ' + e.message, 'error');
+  }
+}
+
+// ── Función de envío unificada (maneja raw y json) ────────────────────────
+// Intenta enviar como string comprimido; si falla, envía objeto JSON directo.
+function _p2pSend(payloadObj) {
+  if (!P2P.conn || !P2P.conn.open) return false;
+  try {
+    const json       = JSON.stringify(payloadObj);
+    const compressed = 'P2P:' + LZString.compressToBase64(json);
+    P2P.conn.send(compressed);
+    return true;
+  } catch(e) {
+    // Fallback: enviar objeto directamente (funciona con serialization:json)
+    try { P2P.conn.send(payloadObj); return true; } catch(e2) {}
+    return false;
   }
 }
 
