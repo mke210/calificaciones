@@ -2194,29 +2194,60 @@ function p2pInit() {
 }
 
 // Crear instancia PeerJS con un ID dado (se separa para poder reintentar con ID nuevo)
+// Intenta 3 configuraciones de servidor en secuencia si la anterior falla.
+const _P2P_SERVERS = [
+  // 1. Broker público de PeerJS
+  { host: '0.peerjs.com', port: 443, secure: true, path: '/' },
+  // 2. Espejo alternativo conocido
+  { host: 'peerjs.92k.de',  port: 443, secure: true, path: '/' },
+  // 3. Sin host especificado → PeerJS Cloud (default)
+  null,
+];
+let _p2pServerIdx = 0;
+
 function _p2pCrearPeer(peerId) {
   // Destruir instancia previa si existe
   if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
 
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ];
+
+  const serverCfg = _P2P_SERVERS[_p2pServerIdx] || _P2P_SERVERS[0];
+  const peerOpts = {
+    debug: 0,
+    config: { iceServers },
+  };
+  if (serverCfg) {
+    Object.assign(peerOpts, { host: serverCfg.host, port: serverCfg.port, secure: serverCfg.secure, path: serverCfg.path });
+  }
+
   try {
-    P2P.peer = new Peer(peerId, {
-      host: '0.peerjs.com', port: 443, secure: true, path: '/',
-      debug: 0,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-        ]
-      }
-    });
+    P2P.peer = new Peer(peerId, peerOpts);
   } catch(e) {
     p2pSetStatus('error', 'No se pudo crear el par: ' + e.message);
     p2pRefreshUI();
     return;
   }
 
+  // Timeout: si en 12 s no abre, probar siguiente servidor
+  const openTimeout = setTimeout(() => {
+    if (P2P.status !== 'connected' && P2P.status !== 'ready') {
+      _p2pServerIdx = (_p2pServerIdx + 1) % _P2P_SERVERS.length;
+      p2pSetStatus('loading', 'Servidor lento · Probando alternativo…');
+      p2pRefreshUI();
+      if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
+      setTimeout(() => _p2pCrearPeer(peerId), 500);
+    }
+  }, 12000);
+
   P2P.peer.on('open', id => {
-    // El servidor confirmó nuestro ID (siempre debe coincidir con el que pedimos)
+    clearTimeout(openTimeout);
+    _p2pServerIdx = 0; // reset para próxima vez
     P2P.myId = id;
     p2pSaveState();
     p2pSetStatus('ready', 'Listo · ID: ' + id);
@@ -2225,12 +2256,14 @@ function _p2pCrearPeer(peerId) {
   });
 
   P2P.peer.on('connection', conn => {
+    clearTimeout(openTimeout);
     _p2pConfigConn(conn);
     p2pSetStatus('connected', 'Conectado con ' + conn.peer);
     p2pRefreshUI();
   });
 
   P2P.peer.on('error', err => {
+    clearTimeout(openTimeout);
     if (err.type === 'peer-unavailable') {
       p2pSetStatus('ready', 'Par remoto no disponible aún · Reintentando…');
       p2pScheduleRetry();
@@ -2242,8 +2275,16 @@ function _p2pCrearPeer(peerId) {
       p2pRefreshUI();
       setTimeout(() => _p2pCrearPeer(P2P.myId), 800);
       return;
+    } else if (err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error') {
+      // Problema de servidor → intentar siguiente
+      _p2pServerIdx = (_p2pServerIdx + 1) % _P2P_SERVERS.length;
+      p2pSetStatus('loading', 'Error de servidor · Probando alternativo…');
+      p2pRefreshUI();
+      if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
+      setTimeout(() => _p2pCrearPeer(peerId), 1500);
+      return;
     } else {
-      p2pSetStatus('error', 'Error de red: ' + (err.message || err.type));
+      p2pSetStatus('error', 'Error: ' + (err.message || err.type));
       p2pScheduleRetry();
     }
     p2pRefreshUI();
@@ -2251,7 +2292,7 @@ function _p2pCrearPeer(peerId) {
 
   P2P.peer.on('disconnected', () => {
     p2pSetStatus('ready', 'Desconectado del servidor · Reconectando…');
-    P2P.peer.reconnect();
+    try { P2P.peer.reconnect(); } catch(e) { setTimeout(() => _p2pCrearPeer(P2P.myId), 2000); }
   });
 
   P2P.peer.on('close', () => {
@@ -2693,8 +2734,8 @@ function p2pRefreshUI() {
           <code style="font-size:0.72rem;color:#888">${myId}</code>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="width:8px;height:8px;border-radius:50%;background:#22cc55;display:inline-block"></span>
-          <span style="font-size:0.72rem;color:#155724;font-weight:600">Activo</span>
+          <span style="width:8px;height:8px;border-radius:50%;background:${P2P.status==='connected'?'#22cc55':P2P.status==='ready'?'#c8c800':P2P.status==='loading'||P2P.status==='connecting'?'#f0a500':'#ee3333'};display:inline-block"></span>
+          <span style="font-size:0.72rem;color:#555;font-weight:600">${{'idle':'Inactivo','loading':'Cargando…','ready':'Listo','connecting':'Conectando…','connected':'Conectado','error':'Error'}[P2P.status]||P2P.status}</span>
           <button onclick="p2pCopiarMiId()" ${P2P.myId ? '' : 'disabled'}
             style="padding:4px 10px;background:var(--ink);color:white;border:none;border-radius:5px;
                    font-family:inherit;font-size:0.72rem;font-weight:700;cursor:pointer;margin-left:4px">
@@ -2713,12 +2754,17 @@ function p2pRefreshUI() {
           <div style="font-weight:700;font-size:0.85rem;color:#1a1a2e">Otro dispositivo</div>
           <code style="font-size:0.72rem;color:#888">${P2P.remoteId || '—'}</code>
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
           <span style="width:8px;height:8px;border-radius:50%;background:${connected ? '#22cc55' : '#f0a500'};display:inline-block"></span>
           <span style="font-size:0.72rem;color:${connected ? '#155724' : '#b85c00'};font-weight:600">${connected ? 'Conectado' : 'Sin conexión'}</span>
+          ${!connected ? `<button onclick="p2pConectar(P2P.remoteId)"
+            style="padding:4px 10px;background:#2a4a9a;color:white;border:none;
+                   border-radius:5px;font-family:inherit;font-size:0.72rem;font-weight:700;cursor:pointer">
+            🔄 Reconectar
+          </button>` : ''}
           <button onclick="p2pOlvidarRemoto()"
             style="padding:4px 8px;background:#fff0f0;color:#aa3333;border:1px solid #ffcccc;
-                   border-radius:5px;font-family:inherit;font-size:0.7rem;cursor:pointer;margin-left:4px">
+                   border-radius:5px;font-family:inherit;font-size:0.7rem;cursor:pointer">
             ✕
           </button>
         </div>
