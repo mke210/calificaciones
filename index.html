@@ -2082,76 +2082,521 @@ function printReporteFinal(){
 //   4. Lógica de fusión        → _aplicarSincDia / importarSincDia
 // ════════════════════════════════════════════════════════════════════
 
-function renderSettingsTab(container) {
-  // ── Estado de hoy para mostrar en la sección QR ─────────────────
-  const hoy = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric' });
+// ════════════════════════════════════════════════════════════════════════════
+// MÓDULO DE SINCRONIZACIÓN P2P (PeerJS / WebRTC)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Flujo de uso:
+//   1. Primera vez: cada dispositivo muestra su "ID de par" (peerID).
+//      El usuario introduce el ID del otro dispositivo una sola vez.
+//   2. El ID del par remoto se guarda en localStorage.
+//   3. En sesiones posteriores la reconexión es automática.
+//   4. "Sincronizar ahora" envía SOLO las calificaciones del grupo actual.
+//   5. El receptor fusiona los datos y guarda localmente.
+//
+// Tecnología: PeerJS (WebRTC DataChannel con señalización en la nube)
+// Sin servidor propio, sin instalaciones, solo Chrome/Edge en WiFi o internet.
+// ════════════════════════════════════════════════════════════════════════════
 
+// ── Estado global del módulo P2P ─────────────────────────────────────────
+const P2P = {
+  peer:       null,   // instancia PeerJS
+  conn:       null,   // DataConnection activa
+  myId:       null,   // ID de este dispositivo (persistido en localStorage)
+  remoteId:   null,   // ID del dispositivo remoto (persistido en localStorage)
+  status:     'idle', // 'idle' | 'loading' | 'ready' | 'connecting' | 'connected' | 'error'
+  lastSync:   null,   // timestamp de última sincronización exitosa
+  autoRetry:  null,   // setTimeout handle para reconexión automática
+};
+
+const P2P_STORAGE_KEY = 'regCalif_p2p_v1'; // clave en localStorage
+
+// ── Persistencia del estado P2P ──────────────────────────────────────────
+function p2pLoadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(P2P_STORAGE_KEY) || '{}');
+    P2P.myId     = s.myId     || null;
+    P2P.remoteId = s.remoteId || null;
+    P2P.lastSync = s.lastSync || null;
+  } catch(e) {}
+}
+
+function p2pSaveState() {
+  localStorage.setItem(P2P_STORAGE_KEY, JSON.stringify({
+    myId:     P2P.myId,
+    remoteId: P2P.remoteId,
+    lastSync: P2P.lastSync,
+  }));
+}
+
+// ── Cargar PeerJS desde CDN (lazy) ───────────────────────────────────────
+function _cargarPeerJS(cb) {
+  if (window.Peer) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
+  s.onload  = () => cb();
+  s.onerror = () => {
+    // Espejo alternativo
+    const s2 = document.createElement('script');
+    s2.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js';
+    s2.onload  = () => cb();
+    s2.onerror = () => { p2pSetStatus('error', 'Sin internet para cargar PeerJS'); };
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+}
+
+// ── Inicializar PeerJS ────────────────────────────────────────────────────
+function p2pInit() {
+  p2pLoadState();
+  p2pSetStatus('loading', 'Cargando módulo de conexión…');
+
+  _cargarPeerJS(() => {
+    // Usar ID persistido si existe, de lo contrario PeerJS genera uno
+    const opts = P2P.myId ? { id: P2P.myId } : {};
+
+    try {
+      P2P.peer = new Peer(opts, {
+        // Servidor de señalización público de PeerJS (gratuito)
+        host: '0.peerjs.com', port: 443, secure: true, path: '/',
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+          ]
+        }
+      });
+    } catch(e) {
+      p2pSetStatus('error', 'No se pudo crear el par: ' + e.message);
+      return;
+    }
+
+    P2P.peer.on('open', id => {
+      P2P.myId = id;
+      p2pSaveState();
+      p2pSetStatus('ready', 'Listo · ID: ' + id);
+      p2pRefreshUI();
+      // Si ya conocemos al remoto, conectar automáticamente
+      if (P2P.remoteId) p2pConectar(P2P.remoteId);
+    });
+
+    P2P.peer.on('connection', conn => {
+      // Alguien se conectó a nosotros
+      _p2pConfigConn(conn);
+      p2pSetStatus('connected', 'Conectado con ' + conn.peer);
+      p2pRefreshUI();
+    });
+
+    P2P.peer.on('error', err => {
+      // "peer-unavailable" ocurre cuando el remoto aún no abrió la app
+      if (err.type === 'peer-unavailable') {
+        p2pSetStatus('ready', 'Par remoto no disponible aún · Reintentando…');
+        p2pScheduleRetry();
+      } else if (err.type === 'unavailable-id') {
+        // ID ya en uso → pedir uno nuevo
+        P2P.myId = null;
+        p2pSaveState();
+        p2pSetStatus('error', 'ID ocupado · Reinicia para obtener uno nuevo');
+      } else {
+        p2pSetStatus('error', 'Error de red: ' + (err.message || err.type));
+        p2pScheduleRetry();
+      }
+      p2pRefreshUI();
+    });
+
+    P2P.peer.on('disconnected', () => {
+      p2pSetStatus('ready', 'Desconectado del servidor · Reconectando…');
+      P2P.peer.reconnect();
+    });
+
+    P2P.peer.on('close', () => {
+      p2pSetStatus('idle', 'Conexión cerrada');
+      p2pRefreshUI();
+    });
+  });
+}
+
+// ── Conectar al dispositivo remoto ───────────────────────────────────────
+function p2pConectar(remoteId) {
+  if (!remoteId || !P2P.peer) return;
+  remoteId = remoteId.trim();
+  if (!remoteId) return;
+
+  // Cerrar conexión previa si existe
+  if (P2P.conn) { try { P2P.conn.close(); } catch(e){} P2P.conn = null; }
+
+  P2P.remoteId = remoteId;
+  p2pSaveState();
+  p2pSetStatus('connecting', 'Conectando con ' + remoteId + '…');
+  p2pRefreshUI();
+
+  const conn = P2P.peer.connect(remoteId, {
+    reliable: true,
+    serialization: 'json',
+    label: 'sync',
+  });
+  _p2pConfigConn(conn);
+}
+
+// ── Configurar DataConnection (recibir + eventos) ────────────────────────
+function _p2pConfigConn(conn) {
+  P2P.conn = conn;
+
+  conn.on('open', () => {
+    // Limpiar reintentos pendientes
+    if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
+    P2P.remoteId = conn.peer;
+    p2pSaveState();
+    p2pSetStatus('connected', 'Conectado · ' + conn.peer);
+    p2pRefreshUI();
+    showToast('🔗 Dispositivo conectado', 'success');
+  });
+
+  conn.on('data', payload => {
+    _p2pRecibirDatos(payload);
+  });
+
+  conn.on('close', () => {
+    if (P2P.conn === conn) {
+      P2P.conn = null;
+      p2pSetStatus('ready', 'Desconectado del par');
+      p2pRefreshUI();
+      // Intentar reconectar si tenemos ID del remoto
+      if (P2P.remoteId) p2pScheduleRetry();
+    }
+  });
+
+  conn.on('error', err => {
+    p2pSetStatus('error', 'Error de conexión: ' + err.message);
+    p2pRefreshUI();
+  });
+}
+
+// ── Reintentar conexión automáticamente ──────────────────────────────────
+function p2pScheduleRetry(delayMs = 8000) {
+  if (P2P.autoRetry) clearTimeout(P2P.autoRetry);
+  if (!P2P.remoteId) return;
+  P2P.autoRetry = setTimeout(() => {
+    if (P2P.status !== 'connected' && P2P.remoteId) {
+      p2pConectar(P2P.remoteId);
+    }
+  }, delayMs);
+}
+
+// ── Enviar calificaciones al par ──────────────────────────────────────────
+function p2pSincronizarAhora() {
+  if (!P2P.conn || !P2P.conn.open) {
+    showToast('⚠️ Sin conexión activa — verifica que el otro dispositivo esté abierto', 'error');
+    return;
+  }
+
+  const sync = _getSyncHoy();
+  const totalCambios = sync.totalCambios || 0;
+
+  if (totalCambios === 0 && Object.keys(sync.grupos).length === 0) {
+    showToast('No hay calificaciones para sincronizar', 'error');
+    return;
+  }
+
+  const payload = {
+    type:      'sync_grades',
+    version:   'sync_v1',
+    timestamp: Date.now(),
+    sender:    P2P.myId,
+    sync,
+  };
+
+  try {
+    P2P.conn.send(payload);
+    P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+    p2pSaveState();
+    showToast(`📤 ${totalCambios} calificaciones enviadas`, 'success');
+    p2pRefreshUI();
+  } catch(e) {
+    showToast('Error al enviar: ' + e.message, 'error');
+  }
+}
+
+// ── Recibir y aplicar datos del par ──────────────────────────────────────
+function _p2pRecibirDatos(payload) {
+  if (!payload || payload.type !== 'sync_grades') return;
+
+  try {
+    _aplicarSincDia(payload.sync);
+    P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+    p2pSaveState();
+    p2pRefreshUI();
+  } catch(e) {
+    showToast('Error al aplicar sincronización: ' + e.message, 'error');
+  }
+}
+
+// ── Desconectar y olvidar el ID remoto ───────────────────────────────────
+function p2pDesconectar() {
+  if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
+  if (P2P.conn)  { try { P2P.conn.close(); } catch(e){} P2P.conn = null; }
+  if (P2P.peer)  { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
+  P2P.remoteId = null;
+  P2P.myId     = null;
+  P2P.status   = 'idle';
+  p2pSaveState();
+  p2pRefreshUI();
+  showToast('Sincronización desactivada', 'success');
+}
+
+// ── Guardar ID remoto ingresado manualmente ───────────────────────────────
+function p2pGuardarIdRemoto() {
+  const input = document.getElementById('p2pRemoteIdInput');
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) { showToast('Ingresa el ID del otro dispositivo', 'error'); return; }
+  if (val === P2P.myId) { showToast('No puedes conectarte a ti mismo', 'error'); return; }
+  p2pConectar(val);
+}
+
+// ── Copiar propio ID al portapapeles ─────────────────────────────────────
+function p2pCopiarMiId() {
+  if (!P2P.myId) return;
+  navigator.clipboard.writeText(P2P.myId).then(() => {
+    showToast('ID copiado al portapapeles', 'success');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = P2P.myId;
+    document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('ID copiado', 'success');
+  });
+}
+
+// ── Estado visual ────────────────────────────────────────────────────────
+function p2pSetStatus(status, msg) {
+  P2P.status = status;
+  P2P._statusMsg = msg;
+}
+
+// ── Actualizar la UI de sincronización ───────────────────────────────────
+function p2pRefreshUI() {
+  const panel = document.getElementById('p2pStatusPanel');
+  if (!panel) return;
+
+  const statusInfo = {
+    idle:       { color: '#888',    bg: '#f5f5f5',  icon: '⚪', label: 'Inactivo' },
+    loading:    { color: '#b85c00', bg: '#fff8f0',  icon: '⏳', label: 'Cargando…' },
+    ready:      { color: '#5a6e00', bg: '#f5fff0',  icon: '🟡', label: 'Listo (sin par)' },
+    connecting: { color: '#2a4a9a', bg: '#f0f4ff',  icon: '🔄', label: 'Conectando…' },
+    connected:  { color: '#155724', bg: '#e8f8ee',  icon: '🟢', label: 'Conectado' },
+    error:      { color: '#7a1010', bg: '#fff0f0',  icon: '🔴', label: 'Error' },
+  };
+  const si = statusInfo[P2P.status] || statusInfo.idle;
+  const connected = P2P.status === 'connected';
+  const hasRemote = !!P2P.remoteId;
+  const myId      = P2P.myId || '—';
+
+  panel.innerHTML = `
+    <!-- Estado de conexión -->
+    <div style="background:${si.bg};border:1.5px solid ${si.color}33;border-radius:10px;
+                padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <span style="font-size:1.4rem">${si.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:${si.color};font-size:0.88rem">${si.label}</div>
+        <div style="font-size:0.75rem;color:#666;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${P2P._statusMsg || ''}
+        </div>
+      </div>
+      ${connected ? `
+        <button onclick="p2pSincronizarAhora()"
+          style="padding:8px 16px;background:#155724;color:white;border:none;border-radius:7px;
+                 font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap;
+                 box-shadow:0 2px 6px rgba(21,87,36,0.3)">
+          🔄 Sincronizar ahora
+        </button>` : ''}
+    </div>
+
+    <!-- Mi ID -->
+    <div style="margin-bottom:12px">
+      <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">
+        Mi ID (este dispositivo)
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <code style="flex:1;background:#f0f0f0;border:1.5px solid #ddd;border-radius:7px;
+                     padding:8px 12px;font-size:0.8rem;color:#1a1a2e;overflow:hidden;
+                     text-overflow:ellipsis;white-space:nowrap;display:block">
+          ${myId}
+        </code>
+        <button onclick="p2pCopiarMiId()" ${P2P.myId ? '' : 'disabled'}
+          style="padding:8px 12px;background:${P2P.myId ? 'var(--ink)' : '#ccc'};
+                 color:white;border:none;border-radius:7px;font-family:inherit;
+                 font-size:0.78rem;font-weight:700;cursor:${P2P.myId ? 'pointer' : 'default'};
+                 white-space:nowrap">
+          📋 Copiar
+        </button>
+      </div>
+      <div style="font-size:0.7rem;color:#aaa;margin-top:4px">
+        Comparte este ID con el otro dispositivo (solo una vez)
+      </div>
+    </div>
+
+    <!-- ID del par remoto -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:0.75rem;font-weight:700;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em">
+        ID del otro dispositivo
+      </div>
+      ${connected || hasRemote ? `
+        <div style="display:flex;align-items:center;gap:8px">
+          <code style="flex:1;background:#f0fff4;border:1.5px solid ${connected ? '#a0ddb0' : '#ddd'};
+                       border-radius:7px;padding:8px 12px;font-size:0.8rem;color:#1a2a1e;
+                       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">
+            ${P2P.remoteId}
+          </code>
+          <button onclick="p2pOlvidarRemoto()"
+            style="padding:8px 10px;background:#f8f0f0;color:#aa3333;border:1.5px solid #ffcccc;
+                   border-radius:7px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">
+            ✕ Cambiar
+          </button>
+        </div>
+        ${P2P.lastSync ? `<div style="font-size:0.7rem;color:#155724;margin-top:4px">✅ Última sincronización: ${P2P.lastSync}</div>` : ''}
+      ` : `
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="p2pRemoteIdInput" type="text" placeholder="Pega aquí el ID del otro dispositivo"
+            style="flex:1;padding:8px 12px;border:1.5px solid #ccc;border-radius:7px;
+                   font-family:inherit;font-size:0.82rem;outline:none;
+                   transition:border-color 0.2s"
+            onfocus="this.style.borderColor='#2a4a9a'"
+            onblur="this.style.borderColor='#ccc'"
+            onkeydown="if(event.key==='Enter') p2pGuardarIdRemoto()">
+          <button onclick="p2pGuardarIdRemoto()"
+            style="padding:8px 14px;background:var(--ink);color:white;border:none;border-radius:7px;
+                   font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">
+            🔗 Conectar
+          </button>
+        </div>
+        <div style="font-size:0.7rem;color:#aaa;margin-top:4px">
+          Copia el ID que aparece en el otro dispositivo y pégalo aquí
+        </div>
+      `}
+    </div>
+
+    <!-- Instrucciones colapsables -->
+    <details style="font-size:0.78rem;color:#555;border:1px solid #e0e0e0;border-radius:8px;padding:0">
+      <summary style="padding:9px 14px;cursor:pointer;font-weight:700;color:#444;list-style:none;
+                      display:flex;align-items:center;gap:6px">
+        <span>❓</span> ¿Cómo funciona?
+      </summary>
+      <div style="padding:2px 14px 12px;line-height:1.7;border-top:1px solid #e8e8e8;margin-top:2px">
+        <ol style="padding-left:18px;display:flex;flex-direction:column;gap:4px;margin:8px 0 0">
+          <li><strong>Primera vez:</strong> abre esta pantalla en los dos dispositivos (tablet y laptop).</li>
+          <li>Copia el <strong>ID</strong> que aparece en la tablet y pégalo en la laptop (o al revés).</li>
+          <li>Presiona <strong>Conectar</strong>. El estado cambiará a 🟢 Conectado.</li>
+          <li><strong>Siguiente vez:</strong> la conexión se restablece sola al abrir la app en ambos.</li>
+          <li>Presiona <strong>🔄 Sincronizar ahora</strong> para enviar las calificaciones.</li>
+        </ol>
+        <div style="margin-top:8px;padding:6px 10px;background:#fff8e8;border-radius:6px;
+                    border-left:3px solid #f0a500;font-size:0.73rem">
+          💡 Ambos dispositivos necesitan internet (aunque sea mínimo) para la señalización inicial.
+          Los datos viajan directamente entre los dispositivos una vez conectados.
+        </div>
+      </div>
+    </details>
+
+    <!-- Botón de emergencia: desactivar -->
+    ${P2P.myId ? `
+      <div style="margin-top:10px;text-align:right">
+        <button onclick="p2pDesconectar()"
+          style="padding:5px 12px;background:none;color:#aaa;border:1px solid #ddd;
+                 border-radius:6px;font-family:inherit;font-size:0.72rem;cursor:pointer">
+          ⊘ Desactivar sincronización
+        </button>
+      </div>
+    ` : `
+      <div style="margin-top:10px">
+        <button onclick="p2pInit()"
+          style="padding:8px 18px;background:var(--ink);color:white;border:none;border-radius:7px;
+                 font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">
+          ▶ Activar sincronización
+        </button>
+      </div>
+    `}
+  `;
+}
+
+// ── Olvidar ID remoto (para cambiar de par) ───────────────────────────────
+function p2pOlvidarRemoto() {
+  if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
+  if (P2P.conn) { try { P2P.conn.close(); } catch(e){} P2P.conn = null; }
+  P2P.remoteId = null;
+  p2pSaveState();
+  p2pSetStatus('ready', 'Par olvidado · Ingresa el nuevo ID');
+  p2pRefreshUI();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RENDER DE LA PESTAÑA DE AJUSTES
+// ════════════════════════════════════════════════════════════════════════════
+
+function renderSettingsTab(container) {
   container.innerHTML = `
   <div style="display:flex;flex-direction:column;gap:20px">
 
-    <!-- ══ 1. GESTIÓN DE DATOS (JSON) ══════════════════════════════ -->
-    <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
+    <!-- ══ 1. SINCRONIZACIÓN P2P ════════════════════════════════════════ -->
+    <div style="background:white;border:2px solid #2a4a7a;border-radius:12px;overflow:hidden;
+                box-shadow:0 2px 10px rgba(42,74,122,0.12)">
+      <div style="background:linear-gradient(135deg,#1a1a2e 0%,#2a3a5a 100%);
+                  padding:14px 20px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:1.5rem">🔗</span>
+        <div style="flex:1">
+          <div style="font-family:'DM Serif Display',serif;font-size:1.05rem;color:white">
+            Sincronización Tablet ↔ Laptop
+          </div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:2px">
+            Conexión directa · Sin cables · Calificaciones en tiempo real
+          </div>
+        </div>
+        <div id="p2pStatusDot" style="width:10px;height:10px;border-radius:50%;
+             background:#888;transition:background 0.4s"></div>
+      </div>
+      <div id="p2pStatusPanel" style="padding:18px 20px">
+        <div style="text-align:center;color:#aaa;font-size:0.85rem;padding:20px 0">
+          Iniciando…
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ 2. RESPALDO JSON ══════════════════════════════════════════════ -->
+    <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;
+                box-shadow:0 2px 6px rgba(0,0,0,0.05)">
       <div style="background:var(--ink);padding:13px 20px;display:flex;align-items:center;gap:10px">
         <span style="font-size:1.2rem">🗄️</span>
         <div>
-          <div style="font-family:'DM Serif Display',serif;font-size:1rem;color:white">Gestión de Datos (JSON)</div>
-          <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:1px">Exporta/importa todos tus datos · Los cambios se guardan localmente con el botón 💾 Guardar</div>
+          <div style="font-family:'DM Serif Display',serif;font-size:1rem;color:white">
+            Respaldo manual (JSON)
+          </div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:1px">
+            Para transferir todos los datos o como copia de seguridad
+          </div>
         </div>
       </div>
       <div style="padding:16px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <!-- Exportar: guarda localmente Y descarga el archivo -->
         <button onclick="exportarYGuardar()"
           style="padding:9px 20px;background:var(--ink);color:white;border:none;border-radius:7px;
-                 font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+                 font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;
+                 display:flex;align-items:center;gap:6px">
           💾 Exportar JSON
         </button>
-        <!-- Importar archivo JSON -->
-        <label style="padding:9px 20px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);
-                      border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;
+        <label style="padding:9px 20px;background:var(--cream);color:var(--ink);
+                      border:1.5px solid var(--border);border-radius:7px;font-family:inherit;
+                      font-size:0.85rem;font-weight:700;cursor:pointer;
                       display:flex;align-items:center;gap:6px">
           📂 Importar JSON
           <input type="file" accept=".json" style="display:none" onchange="importData(event)">
         </label>
-        <span style="font-size:0.72rem;color:#aaa">Útil para respaldo completo o cambio de dispositivo</span>
+        <span style="font-size:0.72rem;color:#aaa">Guarda todos los grupos y configuraciones</span>
       </div>
     </div>
 
-    <!-- ══ 2. SINCRONIZACIÓN POR CÓDIGO QR ══════════════════════════ -->
-    <div style="background:white;border:2px solid #2a4a7a;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(42,74,122,0.12)">
-      <div style="background:linear-gradient(135deg,#1a1a2e 0%,#2a3a5a 100%);padding:14px 20px;display:flex;align-items:center;gap:12px">
-        <span style="font-size:1.5rem">📷</span>
-        <div style="flex:1">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.05rem;color:white">Sincronización por Código QR</div>
-          <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:2px">
-            Transfiere calificaciones entre Tableta y Laptop · Sin internet · Sin cables
-          </div>
-        </div>
-        <div style="background:rgba(255,255,255,0.15);border-radius:20px;padding:3px 10px;font-size:0.7rem;color:rgba(255,255,255,0.8);font-weight:700">
-          Hoy: ${hoy}
-        </div>
-      </div>
-
-      <!-- Sub-tabs: Enviar (Tableta→QR) | Recibir (Laptop←QR) -->
-      <div style="display:flex;border-bottom:2px solid #e8e4dc;background:#fafaf8">
-        <button id="qrTab_enviar" onclick="switchQRTab('enviar')"
-          style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;
-                 font-weight:700;cursor:pointer;color:#2a4a7a;border-bottom:3px solid #2a4a7a;margin-bottom:-2px;
-                 display:flex;align-items:center;justify-content:center;gap:6px">
-          📤 Mostrar QR <span style="font-size:0.7rem;opacity:0.7">(Tableta)</span>
-        </button>
-        <button id="qrTab_recibir" onclick="switchQRTab('recibir')"
-          style="flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:0.82rem;
-                 font-weight:600;cursor:pointer;color:#999;border-bottom:3px solid transparent;margin-bottom:-2px;
-                 display:flex;align-items:center;justify-content:center;gap:6px">
-          📥 Escanear QR <span style="font-size:0.7rem;opacity:0.7">(Laptop)</span>
-        </button>
-      </div>
-
-      <!-- Contenido dinámico del sub-tab -->
-      <div id="qrTabContent" style="padding:18px 20px"></div>
-    </div>
-
-    <!-- ══ 3. ZONA DE PELIGRO ════════════════════════════════════════ -->
+    <!-- ══ 3. ZONA DE PELIGRO ════════════════════════════════════════════ -->
     <div class="danger-zone">
       <h3>⚠️ Zona de Peligro</h3>
       <div class="danger-row"><div><strong>Borrar todas las calificaciones</strong><div class="danger-desc">Mantiene alumnos y actividades.</div></div><button class="btn btn-danger" onclick="clearGradesConfirm()">Borrar Calificaciones</button></div>
@@ -2165,16 +2610,42 @@ function renderSettingsTab(container) {
 
   </div>`;
 
-  // Activar el primer sub-tab (Enviar QR)
-  switchQRTab('enviar');
+  // Inicializar P2P e inyectar panel de estado
+  // (si ya hay una instancia activa, solo refrescar la UI)
+  if (P2P.status === 'idle' || !P2P.peer) {
+    p2pInit();
+  } else {
+    p2pRefreshUI();
+  }
+
+  // Actualizar dot de estado periódicamente mientras el panel está visible
+  _p2pStartDotPulse();
 }
 
-// ── EXPORTAR JSON + GUARDAR LOCAL ────────────────────────────────────
-// Al exportar también se persiste en localStorage (mismo que "Guardar")
+// ── Pulso visual del indicador de estado ─────────────────────────────────
+let _p2pDotInterval = null;
+function _p2pStartDotPulse() {
+  if (_p2pDotInterval) clearInterval(_p2pDotInterval);
+  _p2pDotInterval = setInterval(() => {
+    const dot = document.getElementById('p2pStatusDot');
+    if (!dot) { clearInterval(_p2pDotInterval); _p2pDotInterval = null; return; }
+    const colors = {
+      idle: '#888', loading: '#f0a500', ready: '#c8c800',
+      connecting: '#4a80ff', connected: '#22cc55', error: '#ee3333',
+    };
+    dot.style.background = colors[P2P.status] || '#888';
+    // Parpadeo durante connecting/loading
+    if (P2P.status === 'connecting' || P2P.status === 'loading') {
+      dot.style.opacity = dot.style.opacity === '0.3' ? '1' : '0.3';
+    } else {
+      dot.style.opacity = '1';
+    }
+  }, 600);
+}
+
+// ── EXPORTAR JSON + GUARDAR LOCAL ─────────────────────────────────────────
 function exportarYGuardar() {
-  // 1. Guardar localmente
   localStorage.setItem('regCalif_v3', JSON.stringify(data));
-  // 2. Descargar archivo
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -2187,513 +2658,16 @@ function exportarYGuardar() {
   showToast('💾 Datos guardados y exportados', 'success');
 }
 
-// ════════════════════════════════════════════════════════════════════
-// SUB-TABS DEL MÓDULO QR
-// ════════════════════════════════════════════════════════════════════
-
-let _activeQRTab = 'enviar'; // 'enviar' | 'recibir'
-
-/**
- * Cambia entre sub-tab Enviar (mostrar QR) y Recibir (escanear QR).
- * Detiene la cámara si estaba activa antes de cambiar.
- */
-function switchQRTab(tab) {
-  _activeQRTab = tab;
-  // Detener cámara si se sale de "recibir"
-  if (tab !== 'recibir') _detenerCamaraQRSync();
-
-  ['enviar','recibir'].forEach(t => {
-    const btn = document.getElementById('qrTab_' + t);
-    if (!btn) return;
-    const activo = t === tab;
-    btn.style.color       = activo ? '#2a4a7a' : '#999';
-    btn.style.fontWeight  = activo ? '700' : '600';
-    btn.style.borderBottom = activo ? '3px solid #2a4a7a' : '3px solid transparent';
-  });
-
-  const c = document.getElementById('qrTabContent');
-  if (!c) return;
-  if (tab === 'enviar')  _renderQREnviarTab(c);
-  if (tab === 'recibir') _renderQRRecibirTab(c);
-}
-
-// ── TAB ENVIAR: Generar QRs con calificaciones ───────────────────────
-let _qrEnviarChunks = [];
-let _qrEnviarIndex  = 0;
-let _qrEnviarInst   = null;
-
-/**
- * Genera los chunks LZ+base64 con SOLO las calificaciones de hoy
- * y los muestra como código(s) QR.
- */
-function _renderQREnviarTab(c) {
-  // Obtener payload de calificaciones (formato sync_v1)
-  const sync     = _getSyncHoy();
-  const nGrupos  = Object.keys(sync.grupos).length;
-  const nCal     = sync.totalCambios || 0;
-
-  // Construir payload comprimido
-  const json       = JSON.stringify(sync);
-  const compressed = LZString.compressToBase64(json);
-  const payload    = 'LZ:' + compressed;
-
-  // Dividir en chunks de 900 chars (seguro para QR nivel M)
-  const CHUNK = 900;
-  _qrEnviarChunks = [];
-  for (let i = 0; i < payload.length; i += CHUNK) {
-    _qrEnviarChunks.push(payload.slice(i, i + CHUNK));
-  }
-  _qrEnviarIndex = 0;
-  const total  = _qrEnviarChunks.length;
-  const sizeKB = (json.length / 1024).toFixed(1);
-
-  c.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:16px">
-
-      <!-- Resumen de datos -->
-      <div style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:9px;padding:12px 16px;
-                  display:flex;gap:20px;flex-wrap:wrap;align-items:center">
-        <div style="text-align:center;flex:1;min-width:60px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#2a4a7a">${nGrupos}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Grupo${nGrupos!==1?'s':''}</div>
-        </div>
-        <div style="text-align:center;flex:1;min-width:60px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#2a7a4b">${nCal}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">Calificaciones</div>
-        </div>
-        <div style="text-align:center;flex:1;min-width:60px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#b85c00">${total}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">QR${total!==1?'s':''}</div>
-        </div>
-        <div style="text-align:center;flex:1;min-width:60px">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#888">${sizeKB}</div>
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:#888">KB</div>
-        </div>
-      </div>
-
-      ${nGrupos === 0
-        ? `<div style="background:#fff3cd;border:1.5px solid #f0c060;border-radius:8px;padding:12px 16px;font-size:0.82rem;color:#7a5a00">
-             ⚠️ No hay calificaciones registradas hoy. Registra datos primero.
-           </div>`
-        : `<!-- Código QR -->
-           <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
-             ${total > 1 ? `<div style="font-size:0.78rem;font-weight:700;color:#2a4a7a;text-transform:uppercase;letter-spacing:0.06em"
-               id="qrEnviarLabel">Código QR 1 de ${total}</div>` : ''}
-
-             <div id="qrEnviarCanvas"
-               style="padding:16px;background:white;border:2px solid #2a4a7a;border-radius:12px;
-                      box-shadow:0 4px 20px rgba(42,74,122,0.15)"></div>
-
-             ${total > 1 ? `
-             <div style="display:flex;align-items:center;gap:10px">
-               <button onclick="_qrEnviarNav(-1)" id="qrEnviarPrev"
-                 style="padding:8px 18px;border:1.5px solid #2a4a7a;background:white;color:#2a4a7a;
-                        border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer" disabled>
-                 ◀ Anterior
-               </button>
-               <div id="qrEnviarDots" style="display:flex;gap:5px"></div>
-               <button onclick="_qrEnviarNav(1)" id="qrEnviarNext"
-                 style="padding:8px 18px;background:#2a4a7a;color:white;border:none;border-radius:7px;
-                        font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">
-                 Siguiente ▶
-               </button>
-             </div>` : ''}
-
-             <div style="font-size:0.72rem;color:#888;text-align:center">
-               Muestra este QR a la laptop · La laptop escanea con su cámara
-             </div>
-           </div>`
-      }
-    </div>`;
-
-  // Generar primer QR si hay datos
-  if (nGrupos > 0) _qrEnviarGenerar(0);
-}
-
-/** Genera el QR en el índice dado del array de chunks */
-function _qrEnviarGenerar(idx) {
-  const canvas = document.getElementById('qrEnviarCanvas');
-  if (!canvas) return;
-  canvas.innerHTML = '';
-  if (_qrEnviarInst) { try { _qrEnviarInst.clear(); } catch(e){} }
-
-  const total   = _qrEnviarChunks.length;
-  // Formato: "SYNC:índice:total:datos"
-  const payload = `SYNC:${idx}:${total}:${_qrEnviarChunks[idx]}`;
-
-  try {
-    _qrEnviarInst = new QRCode(canvas, {
-      text: payload, width: 240, height: 240,
-      colorDark: '#1a1a2e', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-  } catch(e) {
-    canvas.innerHTML = `<div style="color:red;font-size:0.8rem;padding:10px">Error: ${e.message}</div>`;
-  }
-
-  // Actualizar label, dots y botones
-  const label = document.getElementById('qrEnviarLabel');
-  if (label) label.textContent = `Código QR ${idx+1} de ${total}`;
-
-  const dots = document.getElementById('qrEnviarDots');
-  if (dots) {
-    dots.innerHTML = '';
-    for (let i = 0; i < total; i++) {
-      const d = document.createElement('div');
-      d.style.cssText = `width:9px;height:9px;border-radius:50%;background:${i===idx?'#2a4a7a':'#ddd'};transition:background 0.2s`;
-      dots.appendChild(d);
-    }
-  }
-  const prev = document.getElementById('qrEnviarPrev');
-  const next = document.getElementById('qrEnviarNext');
-  if (prev) prev.disabled = idx === 0;
-  if (next) {
-    next.disabled = idx === total - 1;
-    next.textContent = idx === total - 1 ? '✅ Fin' : 'Siguiente ▶';
-    next.style.background = idx === total - 1 ? '#2a7a4b' : '#2a4a7a';
-  }
-}
-
-/** Navega entre los QRs del emisor */
-function _qrEnviarNav(dir) {
-  const next = _qrEnviarIndex + dir;
-  if (next < 0 || next >= _qrEnviarChunks.length) return;
-  _qrEnviarIndex = next;
-  _qrEnviarGenerar(_qrEnviarIndex);
-}
-
-// ── TAB RECIBIR: Escanear QR con la cámara ───────────────────────────
-let _qrRecibirStream = null;
-let _qrRecibirAnim   = null;
-let _qrRecibirChunks = {};  // { índice: datos }
-let _qrRecibirTotal  = null;
-
-/**
- * Renderiza el panel de recepción (escaneo de QR desde la tableta).
- * Incluye botón para iniciar/detener cámara y área de feedback.
- */
-function _renderQRRecibirTab(c) {
-  c.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:14px">
-
-      <div style="font-size:0.82rem;color:#555;line-height:1.5">
-        En la <strong>Tableta</strong>: ve a Ajustes → Mostrar QR. Luego apunta esta cámara al QR.<br>
-        Si hay varios QRs, escanéalos en orden. Los datos se fusionan automáticamente.
-      </div>
-
-      <!-- Controles de cámara -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button onclick="_iniciarCamaraQRSync()" id="btnIniciarQRSync"
-          style="padding:9px 22px;background:#2a4a7a;color:white;border:none;border-radius:7px;
-                 font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
-          ▶ Iniciar cámara
-        </button>
-        <button onclick="_detenerCamaraQRSync()" id="btnDetenerQRSync"
-          style="display:none;padding:9px 18px;background:#888;color:white;border:none;border-radius:7px;
-                 font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer;display:none;align-items:center;gap:6px">
-          ⏹ Detener
-        </button>
-      </div>
-
-      <!-- Visor de cámara (oculto hasta iniciar) -->
-      <div id="qrSyncVideoWrap" style="display:none;position:relative;border-radius:10px;overflow:hidden;
-                                        border:2px solid #2a4a7a;max-width:400px">
-        <video id="qrSyncVideo" autoplay playsinline muted style="width:100%;display:block"></video>
-        <canvas id="qrSyncCanvas" style="display:none"></canvas>
-        <!-- Visor del área de escaneo -->
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
-          <div id="qrSyncBox"
-            style="width:220px;height:220px;border:3px solid #2a4a7a;border-radius:12px;
-                   box-shadow:0 0 0 9999px rgba(0,0,0,0.45);transition:border-color 0.25s"></div>
-        </div>
-      </div>
-
-      <!-- Barra de progreso (chunks) -->
-      <div id="qrSyncProgress" style="display:none;background:#f0f4ff;border:1.5px solid #c0d0f0;
-                                       border-radius:8px;padding:10px 14px;font-size:0.82rem">
-        <div style="font-weight:700;color:#1a2a5a;margin-bottom:4px" id="qrSyncProgressTitle">Escaneando...</div>
-        <div style="background:#e0e8ff;border-radius:4px;height:8px;margin-bottom:5px">
-          <div id="qrSyncProgressFill"
-            style="background:#2a4a7a;height:8px;border-radius:4px;width:0%;transition:width 0.3s"></div>
-        </div>
-        <div id="qrSyncProgressDetail" style="font-size:0.75rem;color:#555"></div>
-      </div>
-
-      <!-- Resultado / Feedback -->
-      <div id="qrSyncFeedback" style="min-height:20px;font-size:0.82rem"></div>
-
-    </div>`;
-}
-
-/** Inicia la cámara para escanear QR de sincronización */
-function _iniciarCamaraQRSync() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast('Cámara no disponible en este dispositivo', 'error'); return;
-  }
-  // Resetear estado de chunks recibidos
-  _qrRecibirChunks = {};
-  _qrRecibirTotal  = null;
-
-  const wrap = document.getElementById('qrSyncVideoWrap');
-  const btnI = document.getElementById('btnIniciarQRSync');
-  const btnD = document.getElementById('btnDetenerQRSync');
-  const fb   = document.getElementById('qrSyncFeedback');
-
-  if (wrap) wrap.style.display = 'block';
-  if (btnI) btnI.style.display = 'none';
-  if (btnD) { btnD.style.display = 'flex'; btnD.style.removeProperty('display'); btnD.style.display='flex'; }
-  if (fb)   fb.innerHTML = '<span style="color:#2a4a7a;font-size:0.85rem">🔍 Apunta al código QR de la tableta...</span>';
-
-  _cargarJsQR(() => {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
-      .then(stream => {
-        _qrRecibirStream = stream;
-        const video = document.getElementById('qrSyncVideo');
-        if (video) { video.srcObject = stream; video.play(); }
-        _qrRecibirScanFrame();
-      })
-      .catch(err => {
-        if (fb) fb.innerHTML = `<span style="color:red">❌ ${err.message}</span>`;
-        showToast('Error cámara: ' + err.message, 'error');
-      });
-  });
-}
-
-/** Detiene la cámara de recepción QR */
-function _detenerCamaraQRSync() {
-  if (_qrRecibirAnim) { cancelAnimationFrame(_qrRecibirAnim); _qrRecibirAnim = null; }
-  if (_qrRecibirStream) { _qrRecibirStream.getTracks().forEach(t => t.stop()); _qrRecibirStream = null; }
-
-  const wrap = document.getElementById('qrSyncVideoWrap');
-  const btnI = document.getElementById('btnIniciarQRSync');
-  const btnD = document.getElementById('btnDetenerQRSync');
-  if (wrap) wrap.style.display = 'none';
-  if (btnI) btnI.style.display = 'flex';
-  if (btnD) btnD.style.display = 'none';
-}
-
-/** Loop de escaneo de frames usando BarcodeDetector o jsQR */
-function _qrRecibirScanFrame() {
-  const video  = document.getElementById('qrSyncVideo');
-  const canvas = document.getElementById('qrSyncCanvas');
-  if (!video || !canvas) return;
-
-  // Función interna para procesar un código leído
-  function _procesar(raw) {
-    if (!raw.startsWith('SYNC:') && !raw.startsWith('LZ:')) return;
-
-    // Formato nuevo: "SYNC:índice:total:datos"
-    if (raw.startsWith('SYNC:')) {
-      const parts  = raw.split(':');
-      if (parts.length < 4) return;
-      const idx    = parseInt(parts[1]);
-      const total  = parseInt(parts[2]);
-      const chunk  = parts.slice(3).join(':');
-
-      // Evitar duplicados
-      if (_qrRecibirChunks[idx] === chunk) return;
-      _qrRecibirChunks[idx] = chunk;
-      _qrRecibirTotal = total;
-
-      // Actualizar progreso visual
-      const recibidos = Object.keys(_qrRecibirChunks).length;
-      const pct = Math.round(recibidos / total * 100);
-      const progWrap   = document.getElementById('qrSyncProgress');
-      const progTitle  = document.getElementById('qrSyncProgressTitle');
-      const progFill   = document.getElementById('qrSyncProgressFill');
-      const progDetail = document.getElementById('qrSyncProgressDetail');
-      const box        = document.getElementById('qrSyncBox');
-
-      if (progWrap)  progWrap.style.display = 'block';
-      if (progTitle) progTitle.textContent   = `Escaneando QRs: ${recibidos} / ${total}`;
-      if (progFill)  progFill.style.width    = pct + '%';
-      if (progDetail) progDetail.textContent  = `QR ${idx+1} recibido ✅`;
-      if (box) { box.style.borderColor = '#d4a843'; setTimeout(() => { if(box) box.style.borderColor = '#2a4a7a'; }, 400); }
-
-      // Si completamos todos los chunks → fusionar
-      if (recibidos >= total) {
-        _detenerCamaraQRSync();
-        _ensamblarYFusionarQR();
-      }
-    }
-    // Formato legado (1 solo QR, sin prefijo SYNC:)
-    else if (raw.startsWith('LZ:')) {
-      _detenerCamaraQRSync();
-      _qrRecibirChunks = { 0: raw };
-      _qrRecibirTotal  = 1;
-      _ensamblarYFusionarQR();
-    }
-  }
-
-  // Usar BarcodeDetector si está disponible (más rápido)
-  if (window.BarcodeDetector && video.readyState === video.HAVE_ENOUGH_DATA) {
-    new BarcodeDetector({ formats: ['qr_code'] }).detect(video)
-      .then(codes => { if (codes.length) _procesar(codes[0].rawValue); })
-      .catch(() => {});
-    _qrRecibirAnim = requestAnimationFrame(_qrRecibirScanFrame);
-    return;
-  }
-
-  // Fallback: jsQR
-  if (!window.jsQR) { _qrRecibirAnim = requestAnimationFrame(_qrRecibirScanFrame); return; }
-  const ctx = canvas.getContext('2d');
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const code = window.jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
-    if (code && code.data) _procesar(code.data);
-  }
-  _qrRecibirAnim = requestAnimationFrame(_qrRecibirScanFrame);
-}
-
-/**
- * Ensambla los chunks recibidos, descomprime y aplica la fusión de datos.
- */
-function _ensamblarYFusionarQR() {
-  const fb = document.getElementById('qrSyncFeedback');
-  try {
-    // Reconstruir payload completo
-    let fullPayload = '';
-    for (let i = 0; i < _qrRecibirTotal; i++) {
-      if (!_qrRecibirChunks[i]) throw new Error(`Falta el QR ${i+1}. Escanea de nuevo.`);
-      fullPayload += _qrRecibirChunks[i];
-    }
-
-    // Descomprimir (formato "LZ:..." o directo JSON)
-    let sync;
-    if (fullPayload.startsWith('LZ:')) {
-      const json = LZString.decompressFromBase64(fullPayload.slice(3));
-      if (!json) throw new Error('Error al descomprimir datos');
-      sync = JSON.parse(json);
-    } else {
-      sync = JSON.parse(fullPayload);
-    }
-
-    if (sync.version !== 'sync_v1') throw new Error('Formato de sincronización no reconocido');
-
-    // Aplicar fusión
-    _aplicarSincDia(sync, fb);
-
-  } catch(err) {
-    if (fb) fb.innerHTML = `<div style="background:#fff5f5;border:1.5px solid #ffcccc;border-radius:8px;
-      padding:10px 14px;font-size:0.82rem;color:#721c24">❌ Error: ${err.message}</div>`;
-    showToast('Error al procesar QR: ' + err.message, 'error');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════
-// LÓGICA DE FUSIÓN (compartida por QR y archivo JSON)
-// ════════════════════════════════════════════════════════════════════
-
-/**
- * Fusiona los datos recibidos (via QR o archivo) con los locales.
- * Solo actualiza calificaciones, conducta, tareas y asistencia.
- * Nunca borra datos existentes — solo los enriquece.
- * @param {object} sync   - Objeto con formato sync_v1
- * @param {Element} fbEl  - Elemento DOM para mostrar resultado (opcional)
- */
-function _aplicarSincDia(sync, fbEl) {
-  let calMerged = 0, asistMerged = 0, gruposMerged = 0;
-
-  Object.values(sync.grupos).forEach(sg => {
-    let localG = data.groups.find(g => g.id === sg.id);
-
-    // Si el grupo no existe localmente, agregarlo completo
-    if (!localG) {
-      data.groups.push({ ...sg });
-      gruposMerged++;
-      return;
-    }
-
-    // Fusionar calificaciones (solo si tiene valor)
-    Object.keys(sg.grades || {}).forEach(k => {
-      if (sg.grades[k] !== undefined && sg.grades[k] !== '') {
-        localG.grades[k] = sg.grades[k];
-        calMerged++;
-      }
-    });
-
-    // Fusionar estado de tareas
-    Object.keys(sg.hwStatus || {}).forEach(k => {
-      localG.hwStatus[k] = sg.hwStatus[k];
-    });
-
-    // Fusionar conducta (conservar el nivel más alto)
-    Object.keys(sg.conduct || {}).forEach(k => {
-      if (!localG.conduct[k] || (sg.conduct[k]?.level || 0) > (localG.conduct[k]?.level || 0)) {
-        localG.conduct[k] = sg.conduct[k];
-      }
-    });
-
-    // Fusionar asistencia en localStorage
-    const stored = JSON.parse(localStorage.getItem('regCalif_v3') || '{}');
-    if (!stored.asistencia) stored.asistencia = {};
-    Object.keys(sg.asistencia || {}).forEach(k => {
-      stored.asistencia[k] = { ...(stored.asistencia[k] || {}), ...sg.asistencia[k] };
-      asistMerged++;
-    });
-    localStorage.setItem('regCalif_v3', JSON.stringify(stored));
-    gruposMerged++;
-  });
-
-  // Guardar y re-renderizar
-  autoSave();
-  renderMain();
-
-  // Mostrar resultado
-  const msg = `✅ Sincronización completa — ${calMerged} calificaciones · ${asistMerged} asistencias · ${gruposMerged} grupo${gruposMerged !== 1 ? 's' : ''}`;
-  const fb  = fbEl || document.getElementById('qrSyncFeedback');
-  if (fb) {
-    fb.innerHTML = `<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;
-      padding:10px 14px;font-weight:700;color:#155724">${msg}</div>`;
-  }
-  showToast(msg, 'success');
-
-  // Sonido de éxito (tres tonos ascendentes)
-  try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    [880, 1100, 1320].forEach((freq, i) => {
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.connect(gain); gain.connect(ac.destination);
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.12, ac.currentTime + i * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.12 + 0.2);
-      osc.start(ac.currentTime + i * 0.12);
-      osc.stop(ac.currentTime + i * 0.12 + 0.2);
-    });
-  } catch(e) {}
-}
-
-/**
- * Importa un archivo sync_v1.json desde el sub-tab de sincronización
- * (usado por el bloque "Recibir en laptop → Subir archivo").
- */
-function importarSincDia(input) {
-  const file = input.files[0]; if (!file) return;
-  const label = document.getElementById('sincImportLabel');
-  if (label) label.textContent = file.name;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const sync = JSON.parse(e.target.result);
-      if (sync.version !== 'sync_v1') { showToast('Archivo no es un sync válido', 'error'); return; }
-      _aplicarSincDia(sync);
-    } catch(err) { showToast('Error al leer archivo: ' + err.message, 'error'); }
-    input.value = '';
-  };
-  reader.readAsText(file);
-}
-
-// ── Variables y funciones de compatibilidad ─────────────────────────
-// Alias para funciones que otros módulos aún referencian
-
-/** @deprecated Usar _qrEnviarNav en su lugar */
-function qrNext() { _qrEnviarNav(1); }
-function qrPrev() { _qrEnviarNav(-1); }
-
-/** Compatibilidad: vieja función de exportar grupo individual */
+// ── STUBS DE COMPATIBILIDAD ───────────────────────────────────────────────
+// Funciones que otros módulos pueden referenciar (asistencia, QR de asistencia, etc.)
+
+function switchQRTab(tab)       { /* QR de calificaciones reemplazado por P2P */ }
+function renderSyncQRTab()      { /* reemplazado */ }
+function renderSyncImportTab()  { /* reemplazado */ }
+function setSincImportMode()    { /* reemplazado */ }
+function switchSyncTab()        { /* reemplazado */ }
+function qrNext()               { /* reemplazado */ }
+function qrPrev()               { /* reemplazado */ }
 function exportCurrentGroup() {
   const g = currentGroup();
   if (!g) { showToast('Selecciona un grupo primero', 'error'); return; }
@@ -2708,47 +2682,13 @@ function exportCurrentGroup() {
   showToast('📤 Grupo exportado', 'success');
 }
 
-// ── Stub: las siguientes funciones son referencias internas que se
-//    mantienen para compatibilidad con código de asistencia y otros módulos.
-
-function setSincImportMode(mode) {
-  // Redirigir a la nueva UI (tab recibir ya tiene el manejo unificado)
-  switchQRTab('recibir');
-}
-
-// El bloque anterior renderSettingsTab incluía estas funciones que
-// ahora están unificadas. Se mantienen vacíos para no romper refs.
-function switchSyncTab(tab) { switchQRTab(tab === 'qr' ? 'enviar' : 'recibir'); }
-function renderSyncQRTab()   { switchQRTab('enviar'); }
-function renderSyncImportTab(){ switchQRTab('recibir'); }
-function renderSyncHowtoTab(c) {
-  if (!c) c = document.getElementById('qrTabContent');
-  if (!c) return;
-  c.innerHTML = `
-    <div style="font-size:0.85rem;color:#555;line-height:1.7;display:flex;flex-direction:column;gap:10px">
-      <div style="font-weight:700;color:#1a1a2e;font-size:0.92rem">¿Cómo sincronizar Tableta ↔ Laptop?</div>
-      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:6px">
-        <li><strong>En la Tableta:</strong> Ve a ⚙️ Ajustes → Sincronización QR → <em>Mostrar QR</em>. Aparecerá uno o más códigos QR.</li>
-        <li><strong>En la Laptop:</strong> Ve a ⚙️ Ajustes → Sincronización QR → <em>Escanear QR</em>. Toca <em>▶ Iniciar cámara</em>.</li>
-        <li>Apunta la cámara de la laptop al QR de la tableta. Si hay varios, escanéalos en orden.</li>
-        <li>Al terminar, los datos se fusionan automáticamente. ✅</li>
-      </ol>
-      <div style="background:#f0f4ff;border:1.5px solid #c0d0f0;border-radius:8px;padding:10px 14px;font-size:0.8rem;color:#1a2a5a">
-        💡 <strong>Tip:</strong> Solo se transfieren calificaciones, conducta, tareas y asistencia. Los datos existentes en la laptop <strong>nunca se borran</strong>, solo se enriquecen.
-      </div>
-    </div>`;
-}
-
-// Mantener referencia para compatibilidad con código previo
-const _origRenderSettings = null; // ya no se usa, pero evita errores si algo lo referencia
-
-function _renderSyncInfo() { /* ya no se usa en la nueva UI */ }
-
-// ── Variables de compatibilidad heredadas (no eliminadas por si otros módulos las usan)
+// Variables heredadas (usadas por módulo de asistencia con QR propio)
 let _activeSyncTab = 'qr';
 let _qrChunkIndex  = 0;
 let _qrChunks      = [];
 let _qrInstance    = null;
+const _origRenderSettings = null;
+function _renderSyncInfo() { /* sin uso en nueva UI */ }
 
 function clearGradesConfirm()    { pendingConfirm=()=>{const g=currentGroup();g.grades={};autoSave();renderMain();showToast('Calificaciones eliminadas','success');}; showConfirm('Borrar Calificaciones','¿Eliminar todas las calificaciones?'); }
 function clearConductConfirm()   { pendingConfirm=()=>{const g=currentGroup();g.conduct={};autoSave();renderMain();showToast('Conducta eliminada','success');}; showConfirm('Borrar Conducta','¿Eliminar todos los registros de conducta?'); }
@@ -4782,6 +4722,105 @@ function _guardarTarde(sid) {
   showToast(`⏰ ${s?s.name:sid} — Tardanza registrada`+(motivo?` (${motivo})`:''),'');
 }
 
+
+// ════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════
+// LÓGICA DE FUSIÓN DE DATOS (usada por P2P y por importación manual)
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Aplica un payload sync_v1 recibido (por P2P o archivo) al estado local.
+ * Fusiona calificaciones, tareas, conducta y asistencia sin borrar datos existentes.
+ */
+function _aplicarSincDia(sync, fbEl) {
+  let calMerged = 0, asistMerged = 0, gruposMerged = 0;
+
+  Object.values(sync.grupos).forEach(sg => {
+    let localG = data.groups.find(g => g.id === sg.id);
+
+    if (!localG) {
+      data.groups.push({ ...sg });
+      gruposMerged++;
+      return;
+    }
+
+    // Calificaciones: solo sobreescribe si tiene valor
+    Object.keys(sg.grades || {}).forEach(k => {
+      if (sg.grades[k] !== undefined && sg.grades[k] !== '') {
+        localG.grades[k] = sg.grades[k];
+        calMerged++;
+      }
+    });
+
+    // Tareas
+    Object.keys(sg.hwStatus || {}).forEach(k => {
+      localG.hwStatus[k] = sg.hwStatus[k];
+    });
+
+    // Conducta: conserva el nivel más alto
+    Object.keys(sg.conduct || {}).forEach(k => {
+      if (!localG.conduct[k] || (sg.conduct[k]?.level || 0) > (localG.conduct[k]?.level || 0)) {
+        localG.conduct[k] = sg.conduct[k];
+      }
+    });
+
+    // Asistencia (en localStorage)
+    const stored = JSON.parse(localStorage.getItem('regCalif_v3') || '{}');
+    if (!stored.asistencia) stored.asistencia = {};
+    Object.keys(sg.asistencia || {}).forEach(k => {
+      stored.asistencia[k] = { ...(stored.asistencia[k] || {}), ...sg.asistencia[k] };
+      asistMerged++;
+    });
+    localStorage.setItem('regCalif_v3', JSON.stringify(stored));
+    gruposMerged++;
+  });
+
+  autoSave();
+  renderMain();
+
+  const msg = `✅ Sincronización completa — ${calMerged} calificaciones · ${asistMerged} asistencias · ${gruposMerged} grupo${gruposMerged !== 1 ? 's' : ''}`;
+  const fb = fbEl || document.getElementById('sincScanFeedback');
+  if (fb) {
+    fb.innerHTML = `<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;
+      padding:10px 14px;font-weight:700;color:#155724">${msg}</div>`;
+  }
+  showToast(msg, 'success');
+
+  // Tonos de éxito
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1100, 1320].forEach((freq, i) => {
+      const osc = ac.createOscillator(), gain = ac.createGain();
+      osc.connect(gain); gain.connect(ac.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.12, ac.currentTime + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.12 + 0.2);
+      osc.start(ac.currentTime + i * 0.12);
+      osc.stop(ac.currentTime + i * 0.12 + 0.2);
+    });
+  } catch(e) {}
+}
+
+/**
+ * Importa un archivo sync_v1.json desde un input[type=file].
+ * Complemento manual al P2P para cuando no hay internet.
+ */
+function importarSincDia(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const label = document.getElementById('sincImportLabel');
+  if (label) label.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const sync = JSON.parse(e.target.result);
+      if (sync.version !== 'sync_v1') { showToast('Archivo no es un sync válido', 'error'); return; }
+      _aplicarSincDia(sync);
+    } catch(err) { showToast('Error al leer archivo: ' + err.message, 'error'); }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
 
 // ════════════════════════════════════════════════════════════════════
 // SINCRONIZACIÓN DIARIA
