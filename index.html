@@ -5784,6 +5784,37 @@ function _fbAplicarRemoto(remote) {
   } catch(e) { console.error('[Firebase] Error al aplicar remoto:', e); }
 }
 
+// ── Sincronización forzada (borra local y descarga nube) ─────────────────
+function fbSincronizacionForzada() {
+  if (!confirm('¿Reemplazar todos los datos locales con los datos de Firebase?')) return;
+  if (!FB.ref) { showToast('No hay conexión con Firebase', 'error'); return; }
+  FB.ref.once('value').then(snap => {
+    const remote = snap.val();
+    if (!remote || !remote.groups) {
+      showToast('⚠️ No hay datos en Firebase', 'error');
+      return;
+    }
+    // Borrar datos locales y aplicar remotos sin comparar fechas
+    localStorage.removeItem('regCalif_v3');
+    const { _savedBy, _savedAt, _version, ...remoteData } = remote;
+    data = { ...remoteData };
+    data._savedAt = _savedAt || Date.now();
+    data.groups.forEach(g => {
+      if (!g.grades)   g.grades   = {};
+      if (!g.conduct)  g.conduct  = {};
+      if (!g.hwStatus) g.hwStatus = {};
+    });
+    localStorage.setItem('regCalif_v3', JSON.stringify(data));
+    currentGroupId = null;
+    renderSidebar();
+    renderMain();
+    fbRefreshUI();
+    showToast('✅ Datos de Firebase aplicados: ' + data.groups.length + ' grupos', 'success');
+  }).catch(e => {
+    showToast('⚠️ Error: ' + e.message, 'error');
+  });
+}
+
 // ── Desconectar Firebase ───────────────────────────────────────────────────
 function fbDesconectar() {
   if (FB.listener && FB.ref) { try { FB.ref.off('value', FB.listener); } catch(e){} }
@@ -5868,6 +5899,11 @@ function fbRefreshUI() {
         <div style="font-weight:700;font-size:0.85rem;color:#155724">Conectado a Firebase</div>
         <div style="font-size:0.72rem;color:#555;margin-top:1px">${FB.config?.projectId || ''} · ID: ${FB.deviceId || '—'}</div>
       </div>
+      <button onclick="fbSincronizacionForzada()"
+              style="padding:6px 14px;background:#e85d04;color:#fff;border:none;border-radius:6px;
+                     font-family:inherit;font-size:0.8rem;font-weight:700;cursor:pointer;margin-right:6px">
+        🔄 Forzar sync
+      </button>
       <button onclick="fbCargarDesdeNube(true, true)"
         style="padding:6px 12px;background:#2a7a4b;color:white;border:none;border-radius:6px;
                font-family:inherit;font-size:0.75rem;font-weight:700;cursor:pointer">
