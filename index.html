@@ -3049,11 +3049,25 @@ function renderSettingsTab(container) {
   </div>`;
 
   // Inicializar P2P e inyectar panel de estado
-  // (si ya hay una instancia activa, solo refrescar la UI)
   if (P2P.status === 'idle' || !P2P.peer) {
     p2pInit();
   } else {
     p2pRefreshUI();
+  }
+
+  // Firebase: refrescar UI ahora que el panel existe
+  // Si ya está inicializado solo actualiza la UI; si no, lo inicia
+  if (typeof fbRefreshUI === 'function') {
+    if (FB.status === 'idle' && FB.config) {
+      fbInit();
+    } else {
+      fbRefreshUI();
+      // Si no hay config guardada, mostrar el formulario
+      if (!FB.config) {
+        fbLoadConfig();
+        fbRefreshUI();
+      }
+    }
   }
 
   // Actualizar dot de estado periódicamente mientras el panel está visible
