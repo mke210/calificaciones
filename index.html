@@ -1132,6 +1132,52 @@ function buildSampleData() {
 }
 
 
+// ── Migración defensiva: garantiza que todos los grupos tengan los campos requeridos ──
+// Previene errores "undefined" cuando datos importados/sincronizados tienen campos faltantes.
+function _migrateGroups() {
+  if (!data.groups) data.groups = [];
+  data.groups.forEach(g => {
+    if (!Array.isArray(g.students))   g.students   = [];
+    if (!Array.isArray(g.activities)) g.activities = [];
+    if (!g.grades    || typeof g.grades    !== 'object' || Array.isArray(g.grades))    g.grades    = {};
+    if (!g.conduct   || typeof g.conduct   !== 'object' || Array.isArray(g.conduct))   g.conduct   = {};
+    if (!g.hwStatus  || typeof g.hwStatus  !== 'object' || Array.isArray(g.hwStatus))  g.hwStatus  = {};
+    if (!g.manualAvg || typeof g.manualAvg !== 'object' || Array.isArray(g.manualAvg)) g.manualAvg = {};
+    // Garantizar que cada alumno y actividad tenga id y name
+    g.students.forEach(s => {
+      if (!s.id)   s.id   = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      if (!s.name) s.name = 'Sin nombre';
+    });
+    g.activities.forEach(a => {
+      if (!a.id)   a.id   = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      if (!a.name) a.name = 'Sin nombre';
+    });
+  });
+
+  // ── Propagar códigos QR entre trimestres del mismo grupo ──
+  // Para cada grupo, buscar alumnos con qrCode y copiarlo a los mismos alumnos
+  // (mismo nombre) en grupos con el mismo g.name (otros trimestres).
+  const qrByGroupAndStudent = {};  // { "groupName|studentName": qrCode }
+  data.groups.forEach(g => {
+    (g.students || []).forEach(s => {
+      if (s.qrCode) {
+        const key = g.name + '|' + s.name;
+        // Si ya existe uno, el más reciente gana (último en iterar)
+        qrByGroupAndStudent[key] = s.qrCode;
+      }
+    });
+  });
+  // Aplicar a todos los alumnos
+  data.groups.forEach(g => {
+    (g.students || []).forEach(s => {
+      const key = g.name + '|' + s.name;
+      if (qrByGroupAndStudent[key] && !s.qrCode) {
+        s.qrCode = qrByGroupAndStudent[key];
+      }
+    });
+  });
+}
+
 function init() {
   const saved = localStorage.getItem('regCalif_v3');
   if (saved) { try { data = JSON.parse(saved); } catch(e) {} }
@@ -1144,11 +1190,7 @@ function init() {
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
   }
 
-  data.groups.forEach(g => {
-    if (!g.grades) g.grades = {};
-    if (!g.conduct) g.conduct = {};
-    if (!g.hwStatus) g.hwStatus = {};
-  });
+  _migrateGroups();
   renderSidebar();
   renderMain();
 
@@ -1324,6 +1366,24 @@ function renderSidebar() {
 
 // MAIN
 function renderMain() {
+  try {
+    _renderMainInner();
+  } catch(err) {
+    console.error('[renderMain] Error:', err);
+    const main = document.getElementById('mainArea');
+    if (main) {
+      main.innerHTML = `<div class="no-group" style="color:#c8422a">
+        <div class="icon">⚠️</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:1.4rem">Error al mostrar el grupo</div>
+        <p style="font-size:0.85rem;max-width:480px;text-align:center;margin-top:6px">${escHtml(err.message)}</p>
+        <p style="font-size:0.78rem;color:#888;margin-top:12px;text-align:center">Revisa la consola del navegador (F12) para ver el detalle.<br>Puedes intentar restablecer los datos desde <strong>Ajustes → Zona de Peligro</strong>.</p>
+        <button class="btn btn-primary" onclick="_migrateGroups();renderSidebar();renderMain();" style="margin-top:12px">🔧 Intentar reparar datos</button>
+      </div>`;
+    }
+  }
+}
+
+function _renderMainInner() {
   const main = document.getElementById('mainArea');
   if (!currentGroupId || !currentGroup()) {
     main.innerHTML = `<div class="no-group"><div class="icon">🏫</div><div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#ccc">Sin grupos</div><p>Crea tu primer grupo para comenzar</p><button class="btn btn-primary" onclick="openAddGroup()">+ Crear Grupo</button></div>`;
@@ -5046,16 +5106,57 @@ function editQRCode(sid){
 function saveQRCode(sid){
   const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
   const inp=document.getElementById('qrCodeInput');const code=inp?inp.value.trim():'';
-  const dup=g.students.find(x=>x.id!==sid&&x.qrCode&&x.qrCode===code);
-  if(dup&&code){document.getElementById('qrAssignFeedback').innerHTML=`<span style="color:red">⚠️ Código ya asignado a <strong>${escHtml(dup.name)}</strong></span>`;return;}
-  if(code)s.qrCode=code;else delete s.qrCode;
+
+  // Verificar duplicados GLOBALMENTE (en todos los grupos, cualquier trimestre)
+  // pero permitir que el mismo alumno lo tenga en sus otras instancias (mismo nombre)
+  if(code){
+    let dup=null;
+    for(const grp of data.groups){
+      for(const st of (grp.students||[])){
+        if(st.qrCode===code && st.name!==s.name){ dup=st; break; }
+      }
+      if(dup) break;
+    }
+    if(dup){
+      document.getElementById('qrAssignFeedback').innerHTML=`<span style="color:red">⚠️ Código ya asignado a <strong>${escHtml(dup.name)}</strong></span>`;
+      return;
+    }
+  }
+
+  // Propagar el QR a TODAS las instancias del mismo alumno en el mismo grupo
+  // (mismo g.name = misma clase en distintos trimestres)
+  let propagated=0;
+  data.groups.forEach(grp=>{
+    if(grp.name===g.name){
+      (grp.students||[]).forEach(st=>{
+        if(st.name===s.name){
+          if(code) st.qrCode=code;
+          else delete st.qrCode;
+          propagated++;
+        }
+      });
+    }
+  });
+
   autoSave();document.getElementById('qrCodeModal').remove();renderMain();
-  showToast(code?`✅ Código "${code}" asignado a ${s.name}`:'QR eliminado','success');
+  const trimMsg = propagated>1 ? ` (en ${propagated} trimestres)` : '';
+  showToast(code?`✅ Código "${code}" asignado a ${s.name}${trimMsg}`:'QR eliminado','success');
 }
 
 function clearQRCode(sid){
   const g=currentGroup();const s=g.students.find(x=>x.id===sid);
-  if(s)delete s.qrCode;autoSave();document.getElementById('qrCodeModal').remove();renderMain();
+  if(!s){document.getElementById('qrCodeModal').remove();return;}
+  // Borrar de todas las instancias del mismo alumno en el mismo grupo
+  let removed=0;
+  data.groups.forEach(grp=>{
+    if(grp.name===g.name){
+      (grp.students||[]).forEach(st=>{
+        if(st.name===s.name && st.qrCode){ delete st.qrCode; removed++; }
+      });
+    }
+  });
+  autoSave();document.getElementById('qrCodeModal').remove();renderMain();
+  if(removed>1) showToast(`QR eliminado en ${removed} trimestres`,'success');
 }
 
 let _assignScanStream=null,_assignScanAnim=null;
@@ -5685,11 +5786,7 @@ function _fbAplicarRemoto(remote) {
 
     // Guardar localmente
     data = { ...remoteData };
-    data.groups.forEach(g => {
-      if (!g.grades)   g.grades   = {};
-      if (!g.conduct)  g.conduct  = {};
-      if (!g.hwStatus) g.hwStatus = {};
-    });
+    _migrateGroups();
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
 
     // Refrescar UI
@@ -5725,11 +5822,7 @@ function fbSincronizacionForzada() {
     const { _savedBy, _savedAt, _version, ...remoteData } = remote;
     data = { ...remoteData };
     data._savedAt = _savedAt || Date.now();
-    data.groups.forEach(g => {
-      if (!g.grades)   g.grades   = {};
-      if (!g.conduct)  g.conduct  = {};
-      if (!g.hwStatus) g.hwStatus = {};
-    });
+    _migrateGroups();
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
     currentGroupId = null;
     renderSidebar();
