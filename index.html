@@ -1585,7 +1585,7 @@ function renderHomeworkTab(container) {
 
   // Counters
   let hwDel=0, hwLate=0, hwMiss=0, hwNone=0;
-  g.activities.forEach(a => {
+  [...g.activities].sort((a,b)=>String(a.id).localeCompare(String(b.id))).forEach(a => {
     const grade = g.grades[s.id+'_'+a.id];
     if (grade === 'NE') hwMiss++;
     else if (typeof grade==='string' && grade.startsWith('T:')) hwLate++;
@@ -1644,7 +1644,8 @@ function renderHomeworkTab(container) {
           <th>Observación</th>
         </tr></thead>
         <tbody>`;
-    g.activities.forEach(a => {
+    const sortedActs = [...g.activities].sort((a,b)=> String(a.id).localeCompare(String(b.id)));
+    sortedActs.forEach(a => {
       const key = s.id+'_'+a.id;
       const grade = g.grades[key];
       const hw = g.hwStatus[key] || {};
