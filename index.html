@@ -3698,7 +3698,12 @@ function confirmQuickAdd(type) {
     currentTab = 'calificaciones'; renderMain();
     showToast(names.length===1 ? `✅ Alumno agregado: ${names[0]}` : `✅ ${names.length} alumnos agregados`, 'success');
   } else {
-    names.forEach(n => g.activities.push({id: Date.now().toString(36)+Math.random().toString(36).slice(2), name: n}));
+    const ahora = new Date().toISOString();
+    names.forEach(n => g.activities.push({
+      id: Date.now().toString(36)+Math.random().toString(36).slice(2),
+      name: n,
+      createdAt: ahora
+    }));
     closeQuickModal();
     currentTab = 'calificaciones'; renderMain();
     showToast(names.length===1 ? `✅ Actividad agregada: ${names[0]}` : `✅ ${names.length} actividades agregadas`, 'success');
