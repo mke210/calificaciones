@@ -911,29 +911,45 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 
 <!-- MODAL: Conducta -->
 <div class="overlay" id="modalConduct">
-  <div class="modal wide">
+  <div class="modal wide" style="max-height:90vh;overflow-y:auto;display:flex;flex-direction:column">
     <div class="modal-title">🚨 Registro de Conducta</div>
-    <div id="conductStudentName" style="font-weight:600;margin-bottom:16px;color:#555;font-size:0.9rem"></div>
-    <div class="form-row">
-      <label>Nivel de Conducta General</label>
-      <div class="conduct-levels">
-        <button class="conduct-level-btn cl-1" onclick="selectConductLevel(1)">⭐ Excelente</button>
-        <button class="conduct-level-btn cl-2" onclick="selectConductLevel(2)">⚠️ Regular</button>
-        <button class="conduct-level-btn cl-3" onclick="selectConductLevel(3)">🔶 Mala conducta</button>
-        <button class="conduct-level-btn cl-4" onclick="selectConductLevel(4)">🔴 Muy grave</button>
+    <div id="conductStudentName" style="font-weight:700;margin-bottom:16px;color:var(--ink);font-size:0.95rem;display:flex;align-items:center;gap:6px"></div>
+
+    <!-- Nivel general -->
+    <div class="form-row" style="margin-bottom:14px">
+      <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px;display:block">Nivel de Conducta General</label>
+      <div class="conduct-levels" style="gap:8px">
+        <button class="conduct-level-btn cl-1" onclick="selectConductLevel(1)" style="background:#d4edda;color:#155724">⭐ Excelente</button>
+        <button class="conduct-level-btn cl-2" onclick="selectConductLevel(2)" style="background:#fff3cd;color:#856404">⚠️ Regular</button>
+        <button class="conduct-level-btn cl-3" onclick="selectConductLevel(3)" style="background:#ffe5cc;color:#7a3a00">🔶 Mala conducta</button>
+        <button class="conduct-level-btn cl-4" onclick="selectConductLevel(4)" style="background:#f8d7da;color:#721c24">🔴 Muy grave</button>
       </div>
     </div>
-    <div class="form-row">
-      <label>Agregar Incidente / Razón de mala conducta</label>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="conductReasonInput" placeholder="Ej: Interrumpió la clase, pelea con compañero..." style="flex:1" onkeydown="if(event.key==='Enter')addConductIncident()">
-        <button class="btn btn-orange btn-sm" onclick="addConductIncident()" style="white-space:nowrap">+ Agregar</button>
+
+    <!-- Historial de incidentes -->
+    <div class="form-row" style="flex:1;margin-bottom:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin:0">Historial de Incidentes</label>
+        <span id="conductIncidentCount" style="font-size:0.72rem;color:#aaa"></span>
+      </div>
+      <div id="conductIncidentList" style="max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:8px;padding:4px 6px;background:#fafafa;margin-bottom:10px"></div>
+
+      <!-- Agregar nuevo incidente -->
+      <div style="background:#fff8f0;border:1.5px solid var(--conduct-border);border-radius:8px;padding:12px 14px">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#b85c00;margin-bottom:8px">➕ Agregar incidente</div>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input type="text" id="conductReasonInput"
+            placeholder="Ej: Interrumpió la clase, pelea con compañero..."
+            style="flex:1;padding:8px 12px;border:1.5px solid var(--conduct-border);border-radius:6px;font-family:inherit;font-size:0.85rem;outline:none"
+            onkeydown="if(event.key==='Enter')addConductIncident()">
+          <button class="btn btn-orange btn-sm" onclick="addConductIncident()" style="white-space:nowrap;padding:8px 16px;font-weight:700">+ Agregar</button>
+        </div>
       </div>
     </div>
-    <div id="conductIncidentList"></div>
-    <div class="modal-footer">
+
+    <div class="modal-footer" style="margin-top:16px;padding-top:14px;border-top:1.5px solid var(--border)">
       <button class="btn btn-secondary" onclick="closeModal('modalConduct')">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveConduct()">Guardar Conducta</button>
+      <button class="btn btn-primary" onclick="saveConduct()">💾 Guardar Conducta</button>
     </div>
   </div>
 </div>
@@ -1496,7 +1512,20 @@ function renderGradesTab(container) {
     const isManual = g.manualAvg && g.manualAvg[s.id] !== undefined && g.manualAvg[s.id] !== '';
     const manualDot = isManual ? `<span title="Promedio manual" style="display:block;width:5px;height:5px;border-radius:50%;background:var(--gold);margin:1px auto 0;"></span>` : '';
     html += `<td class="center avg-cell" style="width:32px;min-width:32px;max-width:36px;padding:4px 2px;cursor:pointer;" data-avg="${s.id}" onclick="openAvgEdit('${s.id}',this)" title="Clic para editar promedio"><span class="grade-badge ${cls}" style="font-size:0.85rem;padding:3px 8px;font-weight:700">${inactive?'—':avgStr}</span>${inactive?'':manualDot}</td>
-      <td class="conduct-td" style="text-align:center;padding:6px 4px"><div style="display:flex;align-items:center;justify-content:center;gap:3px">${inactive?'':conductCell}${inactive?'':`<button class="conduct-edit-btn" onclick="openConduct('${s.id}')" title="Editar conducta" style="font-size:0.75rem;padding:1px 3px">✏️</button>`}</div></td>
+      <td class="conduct-td" style="text-align:center;padding:3px 2px;cursor:${inactive?'default':'pointer'}" ${inactive?'':('onclick="openConduct(\'' + s.id + '\')" title="Editar conducta"')}>
+        ${inactive
+          ? '<span style="color:#ddd;font-size:0.75rem">—</span>'
+          : `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+              <div style="background:${cLev===1?'#d4edda':cLev===2?'#fff3cd':cLev===3?'#ffe5cc':cLev===4?'#f8d7da':'#f0ece4'};
+                           border:1.5px solid ${cLev===1?'#a3d9b1':cLev===2?'#ffd97d':cLev===3?'#ffbb80':cLev===4?'#f5a0a8':'#d8d0c4'};
+                           border-radius:6px;padding:3px 5px;min-width:26px;
+                           display:flex;flex-direction:column;align-items:center;gap:1px">
+                <span style="font-size:1rem;line-height:1">${cLev===1?'⭐':cLev===2?'⚠️':cLev===3?'🔶':cLev===4?'🔴':'🚨'}</span>
+                ${(cData.incidents&&cData.incidents.length)?('<span style="font-size:0.55rem;font-weight:800;color:#e07010;line-height:1.4">'+cData.incidents.length+'</span>'):''}
+              </div>
+             </div>`
+        }
+      </td>
       <td style="padding:4px;text-align:center"><div style="display:flex;flex-direction:column;gap:3px;align-items:center"><button title="${pauseTitle}" onclick="toggleStudentActive('${s.id}')" style="border:none;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:0.9rem;${pauseStyle}">${pauseIcon}</button><button title="Eliminar alumno" onclick="deleteStudentConfirm('${s.id}')" style="border:1.5px solid #f5c6cb;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:0.9rem;background:#fff0f0;color:#c8422a;">🗑️</button></div></td></tr>`;
   });
 
@@ -1734,13 +1763,15 @@ function saveHWDetail() {
 
 // ---- CONDUCT MODAL ----
 function openConduct(sid) {
-  const g = currentGroup(); const s = g.students.find(x=>x.id===sid);
+  const g = currentGroup(); if(!g) return;
+  const s = g.students.find(x=>x.id===sid);
   conductStudentId = sid;
   if (!g.conduct) g.conduct = {};
   const cd = g.conduct[sid] || {level:0, incidents:[]};
   conductLevel = cd.level||0;
   conductIncidentsTemp = JSON.parse(JSON.stringify(cd.incidents||[]));
-  document.getElementById('conductStudentName').textContent = '👤 ' + (s?s.name:'');
+  const nameEl = document.getElementById('conductStudentName');
+  if(nameEl) nameEl.innerHTML = `<span style="font-size:1.1rem">👤</span> ${escHtml(s?s.name:'')}`;
   document.getElementById('conductReasonInput').value = '';
   updateConductLevelBtns(); renderConductIncidentList(); openModal('modalConduct');
 }
@@ -1749,19 +1780,46 @@ function updateConductLevelBtns() {
   document.querySelectorAll('.conduct-level-btn').forEach((btn,i) => btn.classList.toggle('selected', i+1===conductLevel));
 }
 function addConductIncident() {
-  const text = document.getElementById('conductReasonInput').value.trim(); if (!text) return;
-  const date = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  conductIncidentsTemp.push({date, text}); document.getElementById('conductReasonInput').value = '';
+  const inp = document.getElementById('conductReasonInput');
+  const text = inp.value.trim(); if (!text) { inp.focus(); return; }
+  const now = new Date();
+  const date = now.toLocaleDateString('es-MX',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+  const time = now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+  conductIncidentsTemp.push({date: date + ' ' + time, text});
+  inp.value = ''; inp.focus();
   renderConductIncidentList();
 }
 function renderConductIncidentList() {
   const list = document.getElementById('conductIncidentList');
-  if (!conductIncidentsTemp.length) { list.innerHTML = '<p style="font-size:0.82rem;color:#bbb;text-align:center;padding:10px 0">Sin incidentes registrados</p>'; return; }
-  let html = '<div class="conduct-incidents" style="margin-top:8px">';
-  conductIncidentsTemp.forEach((inc,i) => {
-    html += `<div class="conduct-incident-row"><span class="inc-date">${inc.date}</span><span class="inc-reason">${escHtml(inc.text)}</span><button class="conduct-incident-del" onclick="removeConductIncident(${i})" title="Eliminar">✕</button></div>`;
+  const cnt  = document.getElementById('conductIncidentCount');
+  if(cnt) cnt.textContent = conductIncidentsTemp.length
+    ? conductIncidentsTemp.length + ' incidente' + (conductIncidentsTemp.length===1?'':'s')
+    : '';
+  if (!conductIncidentsTemp.length) {
+    list.innerHTML = '<p style="font-size:0.82rem;color:#bbb;text-align:center;padding:14px 0">Sin incidentes registrados</p>';
+    return;
+  }
+  // Mostrar del más reciente al más antiguo
+  let html = '';
+  [...conductIncidentsTemp].reverse().forEach((inc, ri) => {
+    const i = conductIncidentsTemp.length - 1 - ri; // índice real para eliminar
+    html += `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+                  border-bottom:1px solid #f0ebe0;background:white;border-radius:6px;
+                  margin-bottom:4px;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.7rem;color:#b85c00;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:5px">
+          <span>📅</span><span>${escHtml(inc.date||'Sin fecha')}</span>
+        </div>
+        <div style="font-size:0.85rem;color:#333;line-height:1.4">${escHtml(inc.text)}</div>
+      </div>
+      <button onclick="removeConductIncident(${i})" title="Eliminar incidente"
+        style="background:none;border:none;cursor:pointer;color:#ccc;font-size:0.9rem;
+               padding:2px 4px;flex-shrink:0;border-radius:4px;line-height:1"
+        onmouseover="this.style.color='#c8422a';this.style.background='#fff0f0'"
+        onmouseout="this.style.color='#ccc';this.style.background='none'">✕</button>
+    </div>`;
   });
-  html += '</div>'; list.innerHTML = html;
+  list.innerHTML = html;
 }
 function removeConductIncident(i) { conductIncidentsTemp.splice(i,1); renderConductIncidentList(); }
 function saveConduct() {
