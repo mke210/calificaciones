@@ -841,124 +841,6 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script></head>
 <body>
 
-<!-- ══ PANTALLA DE LOGIN ══════════════════════════════════════════════════ -->
-<div id="loginOverlay" style="
-  position:fixed;inset:0;z-index:99999;
-  background:linear-gradient(135deg,#0f0f1a 0%,#1a1a2e 50%,#16213e 100%);
-  display:flex;align-items:center;justify-content:center;
-  font-family:'DM Sans',sans-serif;
-">
-  <div style="
-    background:rgba(255,255,255,0.04);
-    border:1.5px solid rgba(255,255,255,0.1);
-    border-radius:20px;
-    padding:42px 40px 36px;
-    width:100%;max-width:360px;
-    box-shadow:0 24px 60px rgba(0,0,0,0.5);
-    backdrop-filter:blur(12px);
-  ">
-    <!-- Logo -->
-    <div style="text-align:center;margin-bottom:28px">
-      <div style="font-size:2.6rem;margin-bottom:10px">📚</div>
-      <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:#fff;line-height:1.2">
-        Registro de <span style="color:#f0a500">Calificaciones</span>
-      </div>
-      <div style="color:rgba(255,255,255,0.4);font-size:0.78rem;margin-top:5px">Acceso restringido</div>
-    </div>
-
-    <!-- Campo usuario -->
-    <div style="margin-bottom:16px">
-      <label style="display:block;color:rgba(255,255,255,0.6);font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:7px">Usuario</label>
-      <input id="loginUser" type="text" autocomplete="username" placeholder=""
-        style="width:100%;padding:12px 14px;background:rgba(255,255,255,0.07);
-               border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;
-               color:#fff;font-family:inherit;font-size:0.95rem;outline:none;
-               box-sizing:border-box;transition:border-color 0.2s"
-        onfocus="this.style.borderColor='rgba(240,165,0,0.6)'"
-        onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
-        onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
-    </div>
-
-    <!-- Campo contraseña -->
-    <div style="margin-bottom:22px">
-      <label style="display:block;color:rgba(255,255,255,0.6);font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:7px">Contraseña</label>
-      <div style="position:relative">
-        <input id="loginPass" type="password" autocomplete="current-password" placeholder=""
-          style="width:100%;padding:12px 44px 12px 14px;background:rgba(255,255,255,0.07);
-                 border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;
-                 color:#fff;font-family:inherit;font-size:0.95rem;outline:none;
-                 box-sizing:border-box;transition:border-color 0.2s"
-          onfocus="this.style.borderColor='rgba(240,165,0,0.6)'"
-          onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
-          onkeydown="if(event.key==='Enter')_doLogin()">
-        <button onclick="_togglePassVis()" title="Mostrar/ocultar"
-          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
-                 background:none;border:none;color:rgba(255,255,255,0.4);font-size:1rem;
-                 cursor:pointer;padding:0;line-height:1" id="loginEye">👁</button>
-      </div>
-    </div>
-
-    <!-- Mensaje error -->
-    <div id="loginErr" style="
-      display:none;color:#ff6b6b;font-size:0.8rem;text-align:center;
-      margin-bottom:14px;padding:8px 12px;
-      background:rgba(255,107,107,0.1);border-radius:8px;
-      border:1px solid rgba(255,107,107,0.3)
-    ">Usuario o contraseña incorrectos</div>
-
-    <!-- Botón -->
-    <button onclick="_doLogin()" id="loginBtn" style="
-      width:100%;padding:13px;
-      background:linear-gradient(135deg,#f0a500,#e07b00);
-      color:#fff;border:none;border-radius:10px;
-      font-family:inherit;font-size:0.95rem;font-weight:700;
-      cursor:pointer;transition:opacity 0.2s,transform 0.1s;letter-spacing:0.03em
-    "
-    onmousedown="this.style.transform='scale(0.98)'"
-    onmouseup="this.style.transform='scale(1)'"
-    onmouseleave="this.style.transform='scale(1)'">
-      Ingresar
-    </button>
-  </div>
-</div>
-
-<script>
-(function(){
-  // Credenciales ofuscadas (no visibles en texto plano)
-  var _x = ['YWRt','aW4='];          // "admin" partido en base64
-  var _y = ['MT','gy','MT','M2'];    // "182136" partido en base64
-  function _r(a){return atob(a.join(''));}
-
-  window._doLogin = function(){
-    var u = document.getElementById('loginUser').value;
-    var p = document.getElementById('loginPass').value;
-    var err = document.getElementById('loginErr');
-    if(u === _r(_x) && p === _r(_y)){
-      var ov = document.getElementById('loginOverlay');
-      ov.style.transition = 'opacity 0.4s';
-      ov.style.opacity = '0';
-      setTimeout(function(){ ov.style.display='none'; }, 420);
-    } else {
-      err.style.display = 'block';
-      var inp = document.getElementById('loginPass');
-      inp.style.borderColor = 'rgba(255,107,107,0.7)';
-      setTimeout(function(){
-        err.style.display='none';
-        inp.style.borderColor='rgba(255,255,255,0.12)';
-      }, 3000);
-    }
-  };
-
-  window._togglePassVis = function(){
-    var f = document.getElementById('loginPass');
-    var e = document.getElementById('loginEye');
-    if(f.type==='password'){ f.type='text'; e.textContent='🙈'; }
-    else { f.type='password'; e.textContent='👁'; }
-  };
-})();
-</script>
-<!-- ══ FIN LOGIN ══════════════════════════════════════════════════════════ -->
-
 <header>
   <div class="header-left">
     <div class="logo-icon">📚</div>
@@ -4168,7 +4050,7 @@ function shareWhatsApp(sid) {
   }
 
   // Tardanzas del alumno con motivos
-  const _asistData = JSON.parse(localStorage.getItem('regCalif_v3')||'{}').asistencia || {};
+  const _asistData = data.asistencia || {};
   const prefix = g.id + '_';
   const tardanzas = [];
   Object.keys(_asistData).filter(k=>k.startsWith(prefix)).forEach(k=>{
@@ -4232,19 +4114,26 @@ init();
 
 let _asist = {
   records:{}, scanStream:null, scanAnim:null, scanActive:false,
-  lastScan:null, lastScanTs:0, camMode:(location.protocol==='https:'||location.hostname==='localhost'),
+  lastScan:null, lastScanTs:0, camMode:true,
   fecha: new Date().toISOString().slice(0,10),
 };
 function _asistKey(gid,f){return gid+'_'+f;}
-function _saveAsist(){const d=JSON.parse(localStorage.getItem('regCalif_v3')||'{}');d.asistencia=_asist.records;localStorage.setItem('regCalif_v3',JSON.stringify(d));}
-function _loadAsist(){const d=JSON.parse(localStorage.getItem('regCalif_v3')||'{}');_asist.records=d.asistencia||{};}
+function _saveAsist(){data.asistencia=_asist.records;localStorage.setItem('regCalif_v3',JSON.stringify(data));}
+function _loadAsist(){if(!data.asistencia)data.asistencia={};_asist.records=data.asistencia;}
 
 function renderAsistenciaTab(container){
+  // Si la cámara estaba activa, detenerla limpiamente antes de re-renderizar
+  // para que el auto-inicio al final funcione correctamente
+  if(_asist.scanActive){
+    if(_asist.scanAnim){cancelAnimationFrame(_asist.scanAnim);_asist.scanAnim=null;}
+    if(_asist.scanStream){_asist.scanStream.getTracks().forEach(t=>t.stop());_asist.scanStream=null;}
+    _asist.scanActive=false;
+  }
   _loadAsist();
   const g=currentGroup();
   if(!g){container.innerHTML='<div class="empty"><div class="icon">✅</div><p>Selecciona un grupo para registrar asistencia.</p></div>';return;}
   const fecha=_asist.fecha, key=_asistKey(g.id,fecha), rec=_asist.records[key]||{};
-  const isHTTPS=location.protocol==='https:'||location.hostname==='localhost';
+  const isHTTPS=true; // Cámara disponible en todos los entornos
   let nPre=0,nAus=0,nTar=0,nSin=0;
   g.students.filter(s=>!s.inactive).forEach(s=>{
     const st=rec[s.id];
@@ -4364,9 +4253,8 @@ function renderAsistenciaTab(container){
       </div>
     </div>
   </div>`;
-  // Auto-iniciar cámara en HTTPS
-  const _isHTTPS2 = location.protocol==='https:'||location.hostname==='localhost';
-  if (_isHTTPS2 && _asist.camMode) { setTimeout(iniciarCamaraAsist, 250); }
+  // Auto-iniciar cámara al entrar a la pestaña
+  if (_asist.camMode) { setTimeout(iniciarCamaraAsist, 300); }
 }
 
 function setAsist(sid,estado){
@@ -4409,21 +4297,43 @@ function marcarTodos(estado){
 function setAsistCamMode(m){_asist.camMode=m;detenerCamaraAsist();renderTab();}
 
 function iniciarCamaraAsist(){
-  if(_asist.scanActive)return; // FIX: evita abrir doble cámara si ya está activa
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showToast('Cámara no disponible','error');return;}
+  // Si ya hay stream activo, no abrir de nuevo
+  if(_asist.scanActive && _asist.scanStream) return;
+  // Limpiar estado previo
+  _asist.scanActive=false;
+  if(_asist.scanAnim){cancelAnimationFrame(_asist.scanAnim);_asist.scanAnim=null;}
+  if(_asist.scanStream){_asist.scanStream.getTracks().forEach(t=>t.stop());_asist.scanStream=null;}
+
   const vw=document.getElementById('asistVideoWrap');
   const bi=document.getElementById('btnIniciarCam');
   const bd=document.getElementById('btnDetenerCam');
   const fb=document.getElementById('asistScanFeedback');
+  if(!vw||!bi){showToast('Recarga la página e intenta de nuevo','error');return;}
   if(vw)vw.style.display='block';if(bi)bi.style.display='none';if(bd)bd.style.display='flex';
-  if(fb)fb.innerHTML='<span style="color:#2a7a4b;font-size:0.85rem">🔍 Apunta al código QR del alumno...</span>';
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}})
+  if(fb)fb.innerHTML='<span style="color:#2a4a7a;font-size:0.85rem">⏳ Solicitando acceso a la cámara...</span>';
+
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    if(fb)fb.innerHTML='<span style="color:#b85c00;font-size:0.82rem">⚠️ Cámara no disponible. Usa HTTPS o permite el acceso en tu navegador.</span>';
+    if(vw)vw.style.display='none';if(bi)bi.style.display='flex';if(bd)bd.style.display='none';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}})
     .then(stream=>{
       _asist.scanStream=stream;_asist.scanActive=true;
-      const v=document.getElementById('asistVideo');if(v){v.srcObject=stream;v.play();}
+      const v=document.getElementById('asistVideo');
+      if(v){v.srcObject=stream;v.play().catch(()=>{});}
+      if(fb)fb.innerHTML='<span style="color:#2a7a4b;font-size:0.85rem">🔍 Apunta al código QR del alumno...</span>';
       _cargarJsQR(()=>_asistScanFrame());
     })
-    .catch(err=>{if(fb)fb.innerHTML=`<span style="color:red">❌ ${err.message}</span>`;showToast('Error cámara: '+err.message,'error');});
+    .catch(err=>{
+      _asist.scanActive=false;_asist.scanStream=null;
+      if(vw)vw.style.display='none';if(bi)bi.style.display='flex';if(bd)bd.style.display='none';
+      const msg=err.name==='NotAllowedError'?'Permiso de cámara denegado. Permite el acceso en tu navegador.':
+                err.name==='NotFoundError'?'No se encontró ninguna cámara en este dispositivo.':
+                err.message||'Error desconocido';
+      if(fb)fb.innerHTML=`<span style="color:#c8422a;font-size:0.82rem">❌ ${msg}</span>`;
+      showToast('Cámara: '+msg,'error');
+    });
 }
 
 function detenerCamaraAsist(){
@@ -5528,7 +5438,7 @@ function clearQRCode(sid){
 let _assignScanStream=null,_assignScanAnim=null;
 function escanearQRParaAsignar(sid){
   const area=document.getElementById('qrAssignScanArea');const fb=document.getElementById('qrAssignFeedback');if(!area)return;
-  const isHTTPS=location.protocol==='https:'||location.hostname==='localhost';
+  const isHTTPS=true;
   area.style.display='block';
   if(!isHTTPS){
     area.innerHTML=`<div style="border:2px dashed #7a9ad0;border-radius:8px;padding:14px;text-align:center;cursor:pointer;background:#f0f4ff" onclick="document.getElementById('qrAssignFileInput').click()">
