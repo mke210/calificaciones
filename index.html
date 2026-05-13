@@ -832,6 +832,91 @@ var QRCode;
   .grade-popup-input:focus { border-color: var(--accent); }
   .grade-popup-save { background: var(--accent); color: white; border: none; border-radius: 4px; padding: 3px 7px; font-family: 'DM Sans',sans-serif; font-size: 0.7rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .grade-popup-save:hover { background: var(--accent-light); }
+
+  /* ══════════ PANTALLA DE LOGIN ══════════ */
+  .login-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: linear-gradient(135deg, #1a1a2e 0%, #2d2d4e 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    transition: opacity 0.5s ease;
+  }
+  .login-screen.fade-out { opacity: 0; pointer-events: none; }
+  .login-card {
+    background: white; border-radius: 16px;
+    padding: 36px 36px 32px; width: 380px; max-width: 92vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    text-align: center;
+    animation: modalIn 0.3s ease;
+  }
+  .login-logo {
+    width: 64px; height: 64px; background: var(--accent);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; margin: 0 auto 16px;
+    box-shadow: 0 6px 20px rgba(200,66,42,0.3);
+  }
+  .login-title { font-family: 'DM Serif Display', serif; font-size: 1.5rem; color: var(--ink); margin-bottom: 6px; }
+  .login-title span { color: var(--gold); }
+  .login-subtitle { font-size: 0.82rem; color: #888; margin-bottom: 24px; }
+  .login-form { text-align: left; }
+  .login-field { margin-bottom: 14px; }
+  .login-field label {
+    display: block; font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #666; margin-bottom: 6px;
+  }
+  .login-field input {
+    width: 100%; padding: 11px 14px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 0.95rem; font-family: 'DM Sans', sans-serif;
+    outline: none; background: white; box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .login-field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(200,66,42,0.12);
+  }
+  .login-pass-wrap { position: relative; }
+  .login-pass-wrap input { padding-right: 44px; }
+  .login-eye {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    font-size: 1.05rem; padding: 6px 10px; border-radius: 6px;
+    opacity: 0.55; transition: opacity 0.15s, background 0.15s;
+  }
+  .login-eye:hover { opacity: 1; background: var(--cream); }
+  .login-eye.active { opacity: 1; }
+  .login-error {
+    min-height: 22px; font-size: 0.82rem;
+    color: var(--danger); text-align: center;
+    margin-bottom: 8px; font-weight: 600;
+    opacity: 0; transition: opacity 0.25s;
+  }
+  .login-error.show { opacity: 1; }
+  .login-btn {
+    width: 100%; padding: 12px;
+    background: var(--accent); color: white;
+    border: none; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 700;
+    cursor: pointer; letter-spacing: 0.02em;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .login-btn:hover { background: var(--accent-light); }
+  .login-btn:active { transform: scale(0.98); }
+  .login-shake { animation: loginShake 0.4s ease; }
+  @keyframes loginShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-8px); }
+    40%, 80% { transform: translateX(8px); }
+  }
+  .btn-logout {
+    background: transparent; color: rgba(255,255,255,0.55);
+    border: 1.5px solid rgba(255,255,255,0.2); border-radius: 6px;
+    padding: 5px 11px; font-family: 'DM Sans',sans-serif;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-logout:hover { background: rgba(200,66,42,0.2); border-color: var(--accent-light); color: white; }
 </style>
 
 <script>
@@ -840,6 +925,31 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script></head>
 <body>
+
+<!-- ══════════ PANTALLA DE LOGIN ══════════ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card" id="loginCard">
+    <div class="login-logo">📚</div>
+    <h2 class="login-title">Registro de <span>Calificaciones</span></h2>
+    <p class="login-subtitle">Ingresa tus credenciales para continuar</p>
+    <div class="login-form">
+      <div class="login-field">
+        <label for="loginUser">Usuario</label>
+        <input type="text" id="loginUser" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="login-field">
+        <label for="loginPass">Contraseña</label>
+        <div class="login-pass-wrap">
+          <input type="password" id="loginPass" autocomplete="off">
+          <button type="button" class="login-eye" id="loginEye"
+            onclick="toggleLoginPass()" aria-label="Mostrar/ocultar contraseña">👁</button>
+        </div>
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button class="login-btn" onclick="doLogin()">Entrar</button>
+    </div>
+  </div>
+</div>
 
 <header>
   <div class="header-left">
@@ -850,6 +960,7 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
     <button class="btn-undo-header" id="undoBtn" onclick="undoAction()" disabled="" title="Sin cambios para deshacer">
       ↩ Deshacer <span class="undo-count" id="undoCount" style="display:none">0</span>
     </button>
+    <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">⏏ Salir</button>
   </div>
 </header>
 
@@ -1003,6 +1114,85 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 
 <script>
 let data = { groups: [] };
+
+// ════════════════════════════════════════════════════════════════════
+// PANTALLA DE LOGIN — credenciales fragmentadas en base64
+// ════════════════════════════════════════════════════════════════════
+// Las credenciales NO aparecen como texto plano. Se reconstruyen en
+// tiempo de ejecución mediante atob() de fragmentos.
+const _LA = ['YWRt', 'aW4='];   // → admin
+const _LB = ['MTgy', 'MTM2'];   // → 182136
+
+function _checkCreds(u, p) {
+  try {
+    const vu = atob(_LA[0]) + atob(_LA[1]);
+    const vp = atob(_LB[0]) + atob(_LB[1]);
+    return u === vu && p === vp;
+  } catch(e) { return false; }
+}
+
+function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  const card  = document.getElementById('loginCard');
+  if (_checkCreds(u, p)) {
+    sessionStorage.setItem('regCalif_auth', '1');
+    const screen = document.getElementById('loginScreen');
+    screen.classList.add('fade-out');
+    setTimeout(() => { screen.style.display = 'none'; }, 520);
+  } else {
+    errEl.textContent = '⚠️ Usuario o contraseña incorrectos';
+    errEl.classList.add('show');
+    card.classList.add('login-shake');
+    setTimeout(() => card.classList.remove('login-shake'), 450);
+    document.getElementById('loginPass').value = '';
+    document.getElementById('loginPass').focus();
+    if (window._loginErrTm) clearTimeout(window._loginErrTm);
+    window._loginErrTm = setTimeout(() => {
+      errEl.classList.remove('show');
+    }, 3000);
+  }
+}
+
+function toggleLoginPass() {
+  const inp = document.getElementById('loginPass');
+  const btn = document.getElementById('loginEye');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = '🙈';
+    btn.classList.add('active');
+  } else {
+    inp.type = 'password';
+    btn.textContent = '👁';
+    btn.classList.remove('active');
+  }
+}
+
+function doLogout() {
+  if (!confirm('¿Cerrar sesión? Tendrás que volver a ingresar tus credenciales.')) return;
+  sessionStorage.removeItem('regCalif_auth');
+  location.reload();
+}
+
+(function _initLogin() {
+  if (sessionStorage.getItem('regCalif_auth') === '1') {
+    const screen = document.getElementById('loginScreen');
+    if (screen) screen.style.display = 'none';
+    return;
+  }
+  const userInp = document.getElementById('loginUser');
+  const passInp = document.getElementById('loginPass');
+  if (!userInp || !passInp) return;
+  userInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); passInp.focus(); }
+  });
+  passInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
+  });
+  setTimeout(() => userInp.focus(), 120);
+})();
+// ════════════════════════════════════════════════════════════════════
 let currentGroupId = null;
 let currentTab = 'calificaciones';
 let renamingGroupId = null;
