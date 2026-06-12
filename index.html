@@ -2019,128 +2019,1102 @@ function saveConduct() {
 }
 
 // ---- ESTADÍSTICAS TAB ----
+
+// Estado del selector (persiste entre renders)
+let _estState = { grado: null, grupo: null, seccion: null, trimestre: null };
+
+// Colores por sección (badge clickeable)
+const _SECCION_COLORS = {
+  A: { bg: '#dbe7f5', fg: '#1e3a6a', border: '#90b5e0' },
+  B: { bg: '#dceddc', fg: '#1a4a1a', border: '#90c890' },
+  C: { bg: '#fae0c8', fg: '#7a3a00', border: '#f0b070' },
+  D: { bg: '#e8d5f0', fg: '#5a2d7a', border: '#c090d4' },
+  E: { bg: '#f5d5d5', fg: '#7a1a1a', border: '#e09090' },
+  F: { bg: '#d0ecec', fg: '#1a5a5a', border: '#80c8c8' },
+  G: { bg: '#ffe8b3', fg: '#7a5a00', border: '#e0c060' },
+  H: { bg: '#d8d0e8', fg: '#3a2a5a', border: '#a090c0' },
+};
+function _seccionStyle(letter) {
+  return _SECCION_COLORS[letter] || { bg: '#f0f0f0', fg: '#888', border: '#ccc' };
+}
+
+// Parse las secciones que existen en el nombre del grupo
+// "PRIMERO ABC" → ['A','B','C']  ·  "PRIMERO DEF" → ['D','E','F']  ·  "3°A" → ['A']
+const _SECCION_STOPWORDS = new Set([
+  'PRIMERO','SEGUNDO','TERCERO','CUARTO','QUINTO','SEXTO','SEPTIMO','OCTAVO','NOVENO','DECIMO',
+  'GRADO','GRUPO','SECCION','CLASE','SALON','AULA',
+  'INFORMATICA','MATEMATICAS','CIENCIAS','HISTORIA','GEOGRAFIA','ESPANOL','INGLES',
+  'FISICA','QUIMICA','EDUCACION','ARTES','TECNOLOGIA','BIOLOGIA','CIVISMO','FORMACION',
+  'LITERATURA','ETICA','ECONOMIA','MUSICA','TUTORIA','DEPORTES','TALLER','LECTURA',
+]);
+
+function _parseSeccionesFromGroupName(name) {
+  if (!name) return [];
+  const norm = String(name).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const letters = new Set();
+  const words = norm.split(/\s+/).filter(Boolean);
+
+  words.forEach(word => {
+    // Patrón "3°A" o "1°ABC" — letras pegadas a º/°
+    const stuck = word.match(/[°º]([A-Z]+)/);
+    if (stuck && stuck[1].length <= 4 && new Set(stuck[1]).size === stuck[1].length) {
+      for (const ch of stuck[1]) letters.add(ch);
+      return;
+    }
+    if (_SECCION_STOPWORDS.has(word)) return;
+    if (/\d/.test(word)) return;          // tiene dígitos, no es sección
+    if (word.length > 4) return;          // demasiado largo (no es sección)
+    if (!/^[A-Z]+$/.test(word)) return;
+    if (new Set(word).size !== word.length) return; // letras repetidas → no es código
+    for (const ch of word) letters.add(ch);
+  });
+  return [...letters].sort();
+}
+
+// Letras disponibles dentro de un grado (unión de todos los grupos del grado)
+function _seccionLettersForGrado(grado, todos) {
+  const letters = new Set();
+  todos.filter(t => t.grado === grado).forEach(t => {
+    _parseSeccionesFromGroupName(t.nombre).forEach(l => letters.add(l));
+  });
+  return [...letters].sort();
+}
+
+// Asigna una sección al alumno y la propaga a todas sus instancias por nombre
+function _setStudentSeccion(sid, letter) {
+  let stu = null;
+  for (const grp of data.groups) {
+    const s = grp.students.find(x => x.id === sid);
+    if (s) { stu = s; break; }
+  }
+  if (!stu) return;
+  let count = 0;
+  data.groups.forEach(grp => {
+    grp.students.forEach(s => {
+      if (s.name === stu.name) {
+        if (letter) s.seccion = letter;
+        else delete s.seccion;
+        count++;
+      }
+    });
+  });
+  autoSave();
+  renderTab();
+  showToast(letter ? `Sección ${letter} asignada` : 'Sección eliminada', '');
+}
+
+// Hace ciclar la sección del alumno entre las letras disponibles del grado
+function _cycleStudentSeccion(sid) {
+  let stu = null;
+  for (const grp of data.groups) {
+    const s = grp.students.find(x => x.id === sid);
+    if (s) { stu = s; break; }
+  }
+  if (!stu) return;
+  const todos = data.groups.map(g => ({
+    g, grado: _gradoFromGroup(g), nombre: g.name, trimestre: g.trimestre || ''
+  }));
+  const letras = _seccionLettersForGrado(_estState.grado, todos);
+  if (!letras.length) {
+    showToast('No hay secciones detectadas en el nombre del grupo', 'error');
+    return;
+  }
+  const cur = stu.seccion || '';
+  const idx = letras.indexOf(cur);
+  let next;
+  if (idx === -1) next = letras[0];
+  else if (idx === letras.length - 1) next = '';
+  else next = letras[idx + 1];
+  _setStudentSeccion(sid, next);
+}
+
+// Listas de nombres comunes en español/mexicano para detección de género
+const _F_NAMES = new Set([
+  'ABIGAIL','ABRIL','ADRIANA','AGATHA','AGUSTINA','AIDA','AILEEN','ALANA','ALBA','ALEJANDRA',
+  'ALEXA','ALEXANDRA','ALICIA','ALISON','ALONDRA','AMANDA','AMELIA','ANA','ANAHI','ANDREA',
+  'ANGELA','ANGELES','ANGELICA','ANGELINA','ANGIE','ANNA','ANYELI','ARACELI','ARELY','ARIADNA',
+  'ARLET','ARLETH','ARLETTE','ASHLEY','AURORA','AYLIN','AZUL','BARBARA','BEATRIZ','BERENICE',
+  'BLANCA','BRENDA','BRIANA','BRIANNA','BRIGITTE','BRITTANY','CAMILA','CANDELARIA','CARLA',
+  'CARMEN','CAROL','CAROLINA','CARLOTTA','CASANDRA','CATALINA','CAYETANA','CECILIA','CELESTE',
+  'CELIA','CHANTAL','CHRISTINA','CINTHIA','CINTIA','CITLALI','CLARA','CLAUDIA','CONSUELO',
+  'CRISTAL','CRISTINA','CYNTHIA','DAFNE','DAIANA','DALIA','DALILA','DANIELA','DANNA','DARA',
+  'DEBORAH','DELFINA','DENISE','DIANA','DOLORES','DOMINIQUE','DULCE','EDITH','ELENA','ELIANA',
+  'ELISA','ELIZABETH','ELOISA','ELSA','ELVIRA','EMILIA','EMILY','ERIKA','ESMERALDA','ESPERANZA',
+  'ESTEFANIA','ESTELA','ESTHER','EUGENIA','EVA','EVELIN','EVELYN','FABIOLA','FATIMA','FERNANDA',
+  'FLOR','FLORENCIA','FLORENTINA','FRIDA','GABRIELA','GENESIS','GENOVEVA','GIANNA','GISELA',
+  'GISELLE','GLORIA','GRACE','GRACIELA','GUADALUPE','HANNAH','HEIDI','HELENA','HILDA','IDA',
+  'ILEANA','ILIANA','INES','INGRID','IRENE','IRIS','ISABEL','ISABELA','ISABELLA','ITZEL',
+  'IVANA','IVONNE','JACINTA','JACQUELINE','JADE','JANET','JAZMIN','JENNIFER','JENNY','JESSICA',
+  'JIMENA','JOANA','JOCELYN','JOHANA','JOHANNA','JOSEFINA','JOSELYN','JOYCE','JUANA','JUDITH',
+  'JULIA','JULIANA','JULIETA','KAREN','KARINA','KARLA','KARLY','KATHERINE','KATIA','KATY',
+  'KAYLA','KENDRA','KENIA','KIMBERLY','LARA','LAURA','LEAH','LEILA','LEONOR','LESLIE','LETICIA',
+  'LIANA','LILA','LILIA','LILIANA','LIZ','LIZBETH','LIZETH','LOLA','LORENA','LORENZA','LUCIA',
+  'LUCILA','LUISA','LUNA','LUZ','MAGDALENA','MARCELA','MARGARITA','MARIA','MARIAM','MARIANA',
+  'MARIBEL','MARILU','MARINA','MARISOL','MARLENE','MARTA','MARTHA','MAYRA','MELANIE','MELISSA',
+  'MIA','MICAELA','MILAGROS','MINERVA','MIRIAM','MIRNA','MONICA','MONSERRAT','MONTSERRAT',
+  'NADIA','NANCY','NAOMI','NAOMY','NATALIA','NICOLE','NOEMI','NORA','NORMA','ODETTE','OLGA',
+  'OLIVIA','PALOMA','PAMELA','PAOLA','PATRICIA','PERLA','PILAR','PRISCILA','PRISCILLA',
+  'QUETZAL','QUETZALLI','RAQUEL','REBECA','REGINA','REINA','RENATA','RHEA','ROCIO','ROSA',
+  'ROSALBA','ROSALIA','ROSANA','ROSARIO','RUBI','RUTH','SABRINA','SAMANTHA','SANDRA','SARA',
+  'SARAI','SARAY','SHARON','SHEILA','SILVIA','SOFIA','SOLEDAD','SONIA','STEPHANIE','SUSANA',
+  'TAMARA','TANIA','TATIANA','TERESA','TONANTZIN','URSULA','VALENTINA','VALERIA','VANESSA',
+  'VERONICA','VICTORIA','VIOLETA','VIRGINIA','VIVIANA','XIMENA','XOCHITL','YADIRA','YAMILE',
+  'YAMILET','YAMILETH','YANELI','YARELY','YENIFER','YESENIA','YOLANDA','ZOE','ZULEMA','ZURI',
+]);
+
+const _M_NAMES = new Set([
+  'AARON','ABEL','ABRAHAM','ADAN','ADOLFO','ADRIAN','AGUSTIN','ALAN','ALBERTO','ALEJANDRO',
+  'ALEX','ALEXANDER','ALEXIS','ALFONSO','ALFREDO','ALONSO','ALVARO','AMADO','AMBROSIO','ANDRES',
+  'ANGEL','ANIBAL','ANTONIO','ARIEL','ARMANDO','ARNOLDO','ARTURO','AUGUSTO','AURELIO','AXEL',
+  'BALTAZAR','BAUTISTA','BENITO','BENJAMIN','BERNARDO','BLAS','BORIS','BRANDON','BRAULIO',
+  'BRAYAN','BRUNO','CALEB','CAMILO','CARLOS','CESAR','CHRISTIAN','CHRISTOPHER','CIPRIANO',
+  'CIRO','CLAUDIO','CLEMENTE','CONRADO','CRISTIAN','CRISTOBAL','DAMIAN','DANIEL','DARIO','DAVID',
+  'DENNIS','DEREK','DIDIER','DIEGO','DOMINGO','DONOVAN','EDER','EDGAR','EDMUNDO','EDUARDO',
+  'EFRAIN','EFREN','ELI','ELIAS','ELIEL','ELIO','ELISEO','EMANUEL','EMILIANO','EMILIO',
+  'EMMANUEL','ENRIQUE','ERICK','ERIK','ERNESTO','ESTEBAN','EUGENIO','EVARISTO','EZEQUIEL',
+  'FABIAN','FAUSTO','FEDERICO','FELIPE','FELIX','FERMIN','FERNANDO','FIDEL','FRANCISCO',
+  'GABINO','GABRIEL','GAEL','GASPAR','GENARO','GERARDO','GERMAN','GERONIMO','GILBERTO',
+  'GIOVANNI','GONZALO','GREGORIO','GUILLERMO','GUSTAVO','HECTOR','HERIBERTO','HERMINIO',
+  'HERNAN','HILARIO','HIPOLITO','HORACIO','HUGO','HUMBERTO','IAN','IGNACIO','IKER','INDALECIO',
+  'IRVING','ISAAC','ISAIAS','ISIDRO','ISMAEL','ISRAEL','IVAN','JACOB','JAIME','JAIRO','JAVIER',
+  'JEREMIAS','JEREMY','JESUS','JOAQUIN','JOEL','JONATHAN','JONNY','JORDAN','JORGE','JOSE',
+  'JOSEPH','JOSHUA','JOSUE','JUAN','JULIAN','JULIO','JUSTINO','KEVIN','LAUREANO','LAUTARO',
+  'LEANDRO','LEO','LEON','LEONARDO','LEONEL','LEOPOLDO','LIAM','LINO','LISANDRO','LORENZO',
+  'LOUIS','LUCAS','LUCIANO','LUIS','MACARIO','MAGNO','MANUEL','MARCEL','MARCELO','MARCO',
+  'MARCOS','MARIANO','MARIO','MARTIN','MATEO','MATIAS','MAURICIO','MAURO','MAXIMILIANO',
+  'MAXIMINO','MAXIMO','MAYNARD','MICHAEL','MIGUEL','MILTON','MOISES','NAHUM','NESTOR','NICOLAS',
+  'NOE','OCTAVIO','OMAR','ORLANDO','OSCAR','OSVALDO','OSWALDO','OTHON','OWEN','PABLO',
+  'PASCUAL','PATRICIO','PEDRO','PORFIRIO','RAFAEL','RAMIRO','RAMON','RAUL','RENATO','REYNALDO',
+  'RICARDO','ROBERTO','RODOLFO','RODRIGO','ROGELIO','ROLANDO','ROMAN','ROMEO','ROMULO',
+  'ROSENDO','RUBEN','RUFINO','SALVADOR','SAMUEL','SANTIAGO','SAUL','SEBASTIAN','SERGIO','SIMON',
+  'SOCRATES','TADEO','TEODORO','TIMOTEO','TOMAS','TRISTAN','ULISES','URIEL','VALENTIN',
+  'VICENTE','VICTOR','VLADIMIR','WALTER','WILLIAM','XAVIER','YAEL','YAHIR','YERAY','ZACARIAS',
+]);
+
+function _detectarGenero(nombre, student) {
+  // Override manual del usuario tiene prioridad
+  if (student && (student.gender === 'M' || student.gender === 'F')) return student.gender;
+  if (!nombre) return '?';
+  const norm = String(nombre).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+  const partes = norm.split(/\s+/);
+  for (const p of partes) {
+    if (_F_NAMES.has(p)) return 'F';
+    if (_M_NAMES.has(p)) return 'M';
+  }
+  // Fallback: terminación del primer nombre
+  const ult = (partes[0] || '').slice(-1);
+  if (ult === 'A') return 'F';
+  if (ult === 'O') return 'M';
+  return '?';
+}
+
+function _parseGrado(s) {
+  if (!s) return '?';
+  const n = String(s).toUpperCase().trim();
+  if (n === '1' || n.includes('PRIMERO') || /(^|\s)1[°º]?/.test(n)) return '1';
+  if (n === '2' || n.includes('SEGUNDO') || /(^|\s)2[°º]?/.test(n)) return '2';
+  if (n === '3' || n.includes('TERCERO') || /(^|\s)3[°º]?/.test(n)) return '3';
+  if (n === '4' || n.includes('CUARTO')  || /(^|\s)4[°º]?/.test(n)) return '4';
+  if (n === '5' || n.includes('QUINTO')  || /(^|\s)5[°º]?/.test(n)) return '5';
+  if (n === '6' || n.includes('SEXTO')   || /(^|\s)6[°º]?/.test(n)) return '6';
+  return '?';
+}
+
+function _gradoFromGroup(g) {
+  if (g.grado) {
+    const p = _parseGrado(g.grado);
+    if (p !== '?') return p;
+  }
+  return _parseGrado(g.name);
+}
+
+function _gradoLabel(g) {
+  const map = { '1':'1° Grado', '2':'2° Grado', '3':'3° Grado',
+                '4':'4° Grado', '5':'5° Grado', '6':'6° Grado',
+                '?':'Sin grado' };
+  return map[g] || ('Grado ' + g);
+}
+
+function _trimLabel(t) {
+  if (t === '1') return '1° Trimestre';
+  if (t === '2') return '2° Trimestre';
+  if (t === '3') return '3° Trimestre';
+  if (t === '' || !t) return 'Sin trimestre';
+  return 'Trimestre ' + t;
+}
+
+function _estChange(field, val) {
+  _estState[field] = val;
+  if (field === 'grado') { _estState.seccion = null; _estState.trimestre = null; }
+  renderTab();
+}
+
+// ── Clasificación rápida: asigna sección a TODOS los alumnos sin clasificar ──
+function _abrirClasificadorRapido() {
+  const todos = data.groups.map(g => ({
+    g, grado: _gradoFromGroup(g), nombre: g.name, trimestre: g.trimestre || ''
+  }));
+  const enGrado = todos.filter(t => t.grado === _estState.grado);
+  if (!enGrado.length) { showToast('Selecciona un grado primero', 'error'); return; }
+
+  const letras = _seccionLettersForGrado(_estState.grado, todos);
+  const letrasUsar = letras.length ? letras : ['A', 'B', 'C'];
+
+  // Recolectar alumnos únicos del grado (de cualquier trimestre, sin duplicados)
+  const vistos = new Set();
+  const alumnos = [];
+  enGrado.forEach(rel => {
+    rel.g.students.filter(s => !s.inactive).forEach(s => {
+      if (vistos.has(s.name)) return;
+      vistos.add(s.name);
+      alumnos.push({ s, grupoSrc: rel.g });
+    });
+  });
+  alumnos.sort((a,b) => {
+    const sA = a.s.seccion || 'ZZZ';
+    const sB = b.s.seccion || 'ZZZ';
+    if (sA !== sB) return sA.localeCompare(sB);
+    return a.s.name.localeCompare(b.s.name, 'es');
+  });
+
+  const sinClasif = alumnos.filter(a => !a.s.seccion).length;
+
+  const existing = document.getElementById('_clasificadorModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = '_clasificadorModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,26,46,0.6);z-index:600;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;backdrop-filter:blur(3px)';
+
+  const btnsHtml = letrasUsar.map(l => {
+    const st = _seccionStyle(l);
+    return `<button onclick="_clAsignarTodos('${l}')"
+      style="padding:6px 14px;background:${st.bg};color:${st.fg};border:2px solid ${st.border};
+             border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:800;cursor:pointer">
+      Todos → ${l}
+    </button>`;
+  }).join('');
+
+  const filas = alumnos.map((a, i) => {
+    const sec = a.s.seccion || '';
+    const st = sec ? _seccionStyle(sec) : { bg:'#f0f0f0', fg:'#aaa', border:'#ccc' };
+    const btnsSec = letrasUsar.map(l => {
+      const s2 = _seccionStyle(l);
+      const activo = sec === l;
+      return `<button data-sid="${a.s.id}" data-letra="${l}" onclick="_clSetSec('${a.s.id}','${l}')"
+        style="width:34px;height:32px;background:${activo?s2.fg:s2.bg};color:${activo?'white':s2.fg};
+               border:2px solid ${s2.border};border-radius:7px;font-family:inherit;
+               font-size:0.88rem;font-weight:800;cursor:pointer;transition:all 0.12s"
+        title="Asignar grupo ${l}">${l}</button>`;
+    }).join('');
+    const clearBtn = sec ? `<button onclick="_clSetSec('${a.s.id}','')" title="Quitar grupo"
+      style="width:28px;height:32px;background:none;border:1px solid #ddd;border-radius:6px;
+             color:#ccc;cursor:pointer;font-size:0.85rem">✕</button>` : '';
+    const badge = sec
+      ? `<span style="display:inline-block;padding:2px 10px;background:${st.bg};color:${st.fg};
+                      border:1.5px solid ${st.border};border-radius:8px;font-weight:800;
+                      font-size:0.85rem;min-width:28px;text-align:center">${sec}</span>`
+      : `<span style="color:#ccc;font-size:0.8rem">—</span>`;
+    return `<tr id="_cl_row_${a.s.id}" style="background:${i%2?'#faf8f4':'white'}">
+      <td style="padding:7px 10px;font-size:0.78rem;color:#ccc;width:32px">${i+1}</td>
+      <td style="padding:7px 14px;font-weight:500;font-size:0.9rem">${escHtml(a.s.name)}</td>
+      <td style="padding:7px 10px;text-align:center;width:48px">${badge}</td>
+      <td style="padding:7px 10px;text-align:center">
+        <div style="display:flex;gap:5px;align-items:center;justify-content:center">
+          ${btnsSec}${clearBtn}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  modal.innerHTML = `
+    <div style="background:white;border-radius:14px;width:580px;max-width:96vw;
+                box-shadow:0 24px 64px rgba(0,0,0,0.28);animation:modalIn 0.2s ease;
+                overflow:hidden;margin:auto">
+      <div style="background:var(--ink);padding:16px 22px;display:flex;align-items:center;
+                  justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:1.15rem;color:white">
+            ✏️ Clasificar alumnos por grupo
+          </div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:2px">
+            ${_gradoLabel(_estState.grado)} · ${alumnos.length} alumnos
+            ${sinClasif > 0 ? `· <span style="color:#f0c060">${sinClasif} sin clasificar</span>` : '· <span style="color:#88e0a0">todos clasificados ✓</span>'}
+          </div>
+        </div>
+        <button onclick="document.getElementById('_clasificadorModal').remove()"
+          style="background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.25);
+                 border-radius:7px;color:white;padding:6px 14px;cursor:pointer;
+                 font-family:inherit;font-size:0.82rem">✕ Cerrar</button>
+      </div>
+
+      <div style="padding:12px 16px;background:#f5f0e8;border-bottom:1.5px solid var(--border);
+                  display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.06em;color:#888">Asignación masiva:</span>
+        ${btnsHtml}
+        <button onclick="_clLimpiarTodos()"
+          style="padding:6px 12px;background:none;border:1.5px solid #ddd;border-radius:7px;
+                 color:#aaa;font-family:inherit;font-size:0.82rem;cursor:pointer;margin-left:auto">
+          ✕ Limpiar todo
+        </button>
+      </div>
+
+      <div style="max-height:60vh;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#f0ede8">
+              <th style="padding:8px 10px;font-size:0.65rem;text-transform:uppercase;color:#aaa;width:32px">#</th>
+              <th style="padding:8px 14px;font-size:0.65rem;text-transform:uppercase;color:#888;text-align:left">Alumno</th>
+              <th style="padding:8px 10px;font-size:0.65rem;text-transform:uppercase;color:#888;text-align:center">Grupo</th>
+              <th style="padding:8px 10px;font-size:0.65rem;text-transform:uppercase;color:#888;text-align:center">Asignar</th>
+            </tr>
+          </thead>
+          <tbody id="_clTableBody">
+            ${filas}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="padding:14px 18px;background:#f5f0e8;border-top:1.5px solid var(--border);
+                  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div id="_clCounter" style="font-size:0.82rem;color:#888">
+          ${letrasUsar.map(l => {
+            const n = alumnos.filter(a => a.s.seccion === l).length;
+            const st = _seccionStyle(l);
+            return `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px">
+              <span style="background:${st.bg};color:${st.fg};border:1.5px solid ${st.border};
+                           border-radius:6px;padding:1px 8px;font-weight:700;font-size:0.8rem">${l}</span>
+              <span style="font-weight:600">${n}</span>
+            </span>`;
+          }).join('')}
+          <span style="color:#bbb">sin asignar: ${alumnos.filter(a=>!a.s.seccion).length}</span>
+        </div>
+        <button onclick="document.getElementById('_clasificadorModal').remove();renderTab()"
+          style="padding:9px 24px;background:var(--green);color:white;border:none;border-radius:8px;
+                 font-family:inherit;font-size:0.88rem;font-weight:700;cursor:pointer">
+          ✓ Listo — aplicar
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) { modal.remove(); renderTab(); } });
+  // Guardar referencia a alumnos para uso por _clSetSec
+  window._clAlumnos = alumnos;
+  window._clLetras  = letrasUsar;
+}
+
+function _clSetSec(sid, letra) {
+  let stu = null;
+  for (const grp of data.groups) {
+    const s = grp.students.find(x => x.id === sid);
+    if (s) { stu = s; break; }
+  }
+  if (!stu) return;
+  data.groups.forEach(grp => {
+    grp.students.forEach(s => {
+      if (s.name === stu.name) {
+        if (letra) s.seccion = letra;
+        else delete s.seccion;
+      }
+    });
+  });
+  autoSave();
+
+  // Actualizar visualmente la fila sin re-renderizar el modal
+  const row = document.getElementById('_cl_row_' + sid);
+  if (row) {
+    const letrasUsar = window._clLetras || ['A','B','C'];
+    const sec = letra;
+    const st = sec ? _seccionStyle(sec) : { bg:'#f0f0f0', fg:'#aaa', border:'#ccc' };
+    const badge = sec
+      ? `<span style="display:inline-block;padding:2px 10px;background:${st.bg};color:${st.fg};border:1.5px solid ${st.border};border-radius:8px;font-weight:800;font-size:0.85rem;min-width:28px;text-align:center">${sec}</span>`
+      : `<span style="color:#ccc;font-size:0.8rem">—</span>`;
+    row.cells[2].innerHTML = badge;
+    const btnsSec = letrasUsar.map(l => {
+      const s2 = _seccionStyle(l);
+      const activo = sec === l;
+      return `<button data-sid="${sid}" data-letra="${l}" onclick="_clSetSec('${sid}','${l}')"
+        style="width:34px;height:32px;background:${activo?s2.fg:s2.bg};color:${activo?'white':s2.fg};
+               border:2px solid ${s2.border};border-radius:7px;font-family:inherit;
+               font-size:0.88rem;font-weight:800;cursor:pointer;transition:all 0.12s">${l}</button>`;
+    }).join('');
+    const clearBtn = sec ? `<button onclick="_clSetSec('${sid}','')" title="Quitar grupo"
+      style="width:28px;height:32px;background:none;border:1px solid #ddd;border-radius:6px;
+             color:#ccc;cursor:pointer;font-size:0.85rem">✕</button>` : '';
+    row.cells[3].innerHTML = `<div style="display:flex;gap:5px;align-items:center;justify-content:center">${btnsSec}${clearBtn}</div>`;
+  }
+  // Actualizar contador
+  _clRefrescarContador();
+}
+
+function _clRefrescarContador() {
+  const el = document.getElementById('_clCounter');
+  if (!el || !window._clAlumnos) return;
+  const letrasUsar = window._clLetras || ['A','B','C'];
+  const alumnos = window._clAlumnos;
+  // Recargar seccion de datos actuales
+  alumnos.forEach(a => {
+    for (const grp of data.groups) {
+      const s = grp.students.find(x => x.id === a.s.id);
+      if (s) { a.s = s; break; }
+    }
+  });
+  el.innerHTML = letrasUsar.map(l => {
+    const n = alumnos.filter(a => a.s.seccion === l).length;
+    const st = _seccionStyle(l);
+    return `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px">
+      <span style="background:${st.bg};color:${st.fg};border:1.5px solid ${st.border};
+                   border-radius:6px;padding:1px 8px;font-weight:700;font-size:0.8rem">${l}</span>
+      <span style="font-weight:600">${n}</span>
+    </span>`;
+  }).join('') + `<span style="color:#bbb">sin asignar: ${alumnos.filter(a=>!a.s.seccion).length}</span>`;
+}
+
+function _clAsignarTodos(letra) {
+  if (window._clAlumnos) {
+    window._clAlumnos.forEach(a => _clSetSec(a.s.id, letra));
+  }
+}
+
+function _clLimpiarTodos() {
+  if (window._clAlumnos) {
+    window._clAlumnos.forEach(a => _clSetSec(a.s.id, ''));
+  }
+}
+
+// ── Imprimir reporte de dirección por grupo / trimestre ──────────────────
+function _imprimirReporteGrupo(seccion, trimestre, grado) {
+  const todos = data.groups.map(g => ({
+    g, grado: _gradoFromGroup(g), nombre: g.name, trimestre: g.trimestre || ''
+  }));
+  const enGrado = todos.filter(t => t.grado === grado);
+  const enTrim  = enGrado.filter(t => t.trimestre === trimestre);
+  if (!enTrim.length) { showToast('No se encontraron grupos para este trimestre', 'error'); return; }
+
+  const PASS = 6;
+
+  // Función auxiliar: busca el avg de un alumno por nombre en un trimestre dado
+  function avgEnTrimestre(nombre, t) {
+    const rels = enGrado.filter(x => x.trimestre === t);
+    for (const rel of rels) {
+      const stu = rel.g.students.find(s => s.name === nombre && !s.inactive);
+      if (stu) { const a = calcAvg(rel.g, stu.id); if (a !== null) return a; }
+    }
+    return null;
+  }
+
+  const vistos = new Set();
+  const alumnos = [];
+  enTrim.forEach(rel => {
+    rel.g.students.filter(s => !s.inactive && s.seccion === seccion).forEach(s => {
+      if (vistos.has(s.name)) return;
+      vistos.add(s.name);
+      const a1 = avgEnTrimestre(s.name, '1');
+      const a2 = avgEnTrimestre(s.name, '2');
+      const a3 = avgEnTrimestre(s.name, '3');
+      const avg = calcAvg(rel.g, s.id); // trimestre actual seleccionado
+      const trimsConVal = [a1, a2, a3].filter(v => v !== null);
+      const promFinal = trimsConVal.length > 0
+        ? trimsConVal.reduce((s,v)=>s+v,0) / trimsConVal.length
+        : null;
+      alumnos.push({ s, g: rel.g, avg, a1, a2, a3, promFinal });
+    });
+  });
+  alumnos.sort((a,b) => a.s.name.localeCompare(b.s.name, 'es'));
+
+  // Estadísticas del trimestre seleccionado
+  let hombres = 0, mujeres = 0, aprob = 0, reprob = 0, suma = 0, conCal = 0;
+  // Estadísticas del promedio final
+  let aprobF = 0, reprobF = 0, sumaF = 0, conCalF = 0;
+
+  alumnos.forEach(a => {
+    const gen = _detectarGenero(a.s.name, a.s);
+    if (gen === 'M') hombres++; else if (gen === 'F') mujeres++;
+    if (a.avg !== null) { suma += a.avg; conCal++; if (a.avg >= PASS) aprob++; else reprob++; }
+    if (a.promFinal !== null) { sumaF += a.promFinal; conCalF++; if (a.promFinal >= PASS) aprobF++; else reprobF++; }
+  });
+  const total  = alumnos.length;
+  const pctA   = conCal  > 0 ? (aprob /conCal *100).toFixed(1) : '0.0';
+  const pctR   = conCal  > 0 ? (reprob/conCal *100).toFixed(1) : '0.0';
+  const promG  = conCal  > 0 ? (suma  /conCal ).toFixed(2) : '0.00';
+  const sumaStr = suma.toFixed(1);
+  const promFinalGrupo = conCalF > 0 ? (sumaF/conCalF).toFixed(2) : '0.00';
+
+  // Detectar cuántos trimestres hay disponibles (para mostrar columnas)
+  const tieneTrim = { '1': false, '2': false, '3': false };
+  alumnos.forEach(a => {
+    if (a.a1 !== null) tieneTrim['1'] = true;
+    if (a.a2 !== null) tieneTrim['2'] = true;
+    if (a.a3 !== null) tieneTrim['3'] = true;
+  });
+  const trimsVisibles = ['1','2','3'].filter(t => tieneTrim[t]);
+  const mostrarTrims = trimsVisibles.length > 1; // Solo mostrar columnas T1/T2/T3 si hay más de uno
+
+  const grupoNombre = enTrim[0] ? enTrim[0].g.subject || enTrim[0].g.name : '';
+  const now = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+  const trimLbl  = _trimLabel(trimestre);
+  const gradoLbl = _gradoLabel(grado);
+
+  const filas = alumnos.map((a, i) => {
+    const gen = _detectarGenero(a.s.name, a.s);
+    const status = a.avg === null ? '—' : a.avg >= PASS ? 'Aprobado' : 'Reprobado';
+    const statusColor = a.avg === null ? '#aaa' : a.avg >= PASS ? '#155724' : '#721c24';
+    const pfColor = a.promFinal === null ? '#aaa' : a.promFinal >= PASS ? '#155724' : '#721c24';
+    const pfBg    = a.promFinal === null ? '#f5f5f5' : a.promFinal >= PASS ? '#d4edda' : '#f8d7da';
+    const t1Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a1 !== null ? Math.round(a.a1) : '—'}</td>` : '';
+    const t2Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a2 !== null ? Math.round(a.a2) : '—'}</td>` : '';
+    const t3Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a3 !== null ? Math.round(a.a3) : '—'}</td>` : '';
+    return `<tr style="background:${i%2===0?'white':'#f9f7f4'}">
+      <td style="padding:6px 8px;color:#aaa;font-size:0.8rem;text-align:center">${i+1}</td>
+      <td style="padding:6px 12px;font-weight:500">${escHtml(a.s.name)}</td>
+      <td style="padding:6px 8px;text-align:center">${gen==='M'?'H':gen==='F'?'M':'?'}</td>
+      ${t1Cell}${t2Cell}${t3Cell}
+      <td style="padding:6px 8px;text-align:center;font-weight:700;background:#f0f4ff">${a.avg !== null ? Math.round(a.avg) : '—'}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:800;background:${pfBg};color:${pfColor}">${a.promFinal !== null ? a.promFinal.toFixed(2) : '—'}</td>
+      <td style="padding:6px 8px;text-align:center;color:${statusColor};font-weight:600;font-size:0.82rem">${status}</td>
+    </tr>`;
+  }).join('');
+
+  // Fila de totales al pie de la tabla
+  const filaTotal = `<tr style="background:#1a1a2e;color:white;font-weight:700">
+    <td colspan="3" style="padding:7px 12px;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.6)">Promedio del grupo</td>
+    ${mostrarTrims ? `<td style="padding:7px 8px;text-align:center">${
+      alumnos.filter(a=>a.a1!==null).length > 0
+        ? (alumnos.filter(a=>a.a1!==null).reduce((s,a)=>s+a.a1,0)/alumnos.filter(a=>a.a1!==null).length).toFixed(2)
+        : '—'
+    }</td><td style="padding:7px 8px;text-align:center">${
+      alumnos.filter(a=>a.a2!==null).length > 0
+        ? (alumnos.filter(a=>a.a2!==null).reduce((s,a)=>s+a.a2,0)/alumnos.filter(a=>a.a2!==null).length).toFixed(2)
+        : '—'
+    }</td><td style="padding:7px 8px;text-align:center">${
+      alumnos.filter(a=>a.a3!==null).length > 0
+        ? (alumnos.filter(a=>a.a3!==null).reduce((s,a)=>s+a.a3,0)/alumnos.filter(a=>a.a3!==null).length).toFixed(2)
+        : '—'
+    }</td>` : ''}
+    <td style="padding:7px 8px;text-align:center;background:rgba(255,255,255,0.1)">${promG}</td>
+    <td style="padding:7px 8px;text-align:center;background:rgba(212,168,67,0.3);color:#f0c060;font-size:1rem">${promFinalGrupo}</td>
+    <td></td>
+  </tr>`;
+
+  const thTrims = mostrarTrims
+    ? '<th class="c">T1</th><th class="c">T2</th><th class="c">T3</th>'
+    : '';
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Reporte ${seccion} — ${trimLbl}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#1a1a2e;padding:22px 28px;font-size:11pt}
+    .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:2.5px solid #1a1a2e}
+    .titulo{font-size:17pt;font-weight:900;margin-bottom:3px}
+    .subtitulo{font-size:10pt;color:#555}
+    .fecha{font-size:9pt;color:#aaa;text-align:right}
+    .resumen{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+    .res-card{border:1.5px solid #ddd;border-radius:8px;padding:10px 12px;text-align:center;page-break-inside:avoid}
+    .res-val{font-size:20pt;font-weight:900;line-height:1.1;margin-bottom:2px}
+    .res-lbl{font-size:7.5pt;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:700}
+    .stats-box{background:#f5f0e8;border:1.5px solid #c8c0b0;border-radius:8px;padding:12px 16px;margin-bottom:18px}
+    .stats-box h3{font-size:9pt;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:8px;font-weight:700}
+    .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid #c8c0b0;border-radius:6px;overflow:hidden}
+    .stat-item{padding:10px 12px;text-align:center;border-right:1px solid #c8c0b0}
+    .stat-item:last-child{border-right:none}
+    .stat-item:nth-child(4),.stat-item:nth-child(5),.stat-item:nth-child(6){border-top:1px solid #c8c0b0}
+    .stat-item:nth-child(7),.stat-item:nth-child(8),.stat-item:nth-child(9){border-top:1px solid #c8c0b0}
+    .si-val{font-size:15pt;font-weight:900;color:#1a1a2e}
+    .si-lbl{font-size:7pt;text-transform:uppercase;letter-spacing:0.05em;color:#888;font-weight:700;margin-top:1px}
+    .prom-final-box{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:12px;
+                    padding:10px 16px;background:#1a1a2e;border-radius:8px;flex-wrap:wrap}
+    .prom-trim-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
+                    border-radius:20px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);
+                    font-size:9pt;font-weight:600}
+    .prom-trim-pill strong{font-size:12pt;color:white}
+    .prom-final-pill{display:inline-flex;align-items:center;gap:6px;padding:8px 20px;
+                     border-radius:20px;background:rgba(212,168,67,0.25);border:2px solid #d4a843;
+                     color:#d4a843;font-size:10pt;font-weight:700}
+    .prom-final-pill strong{font-size:16pt;font-weight:900}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    th{background:#1a1a2e;color:white;padding:7px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:0.05em;text-align:left;font-weight:700}
+    th.c{text-align:center}
+    td{padding:6px 8px;border-bottom:1px solid #eee}
+    .firma-area{margin-top:28px;display:flex;gap:40px;flex-wrap:wrap}
+    .firma{flex:1;min-width:160px;border-top:1.5px solid #1a1a2e;padding-top:6px;text-align:center;font-size:9pt;color:#555}
+    .aprobados-color{color:#155724}.reprobados-color{color:#721c24}
+    .bar{height:8px;border-radius:4px;background:#eee;overflow:hidden;margin:4px 0}
+    .bar-inner-a{height:100%;background:#2a7a4b;float:left}
+    .bar-inner-r{height:100%;background:#c8422a;float:left}
+    @page{margin:14mm}@media print{body{padding:0}.no-print{display:none}}
+  </style></head><body>
+
+  <div class="header">
+    <div>
+      <div class="titulo">📋 Reporte de Grupo ${seccion}</div>
+      <div class="subtitulo">${gradoLbl} · ${trimLbl} · ${escHtml(grupoNombre)}</div>
+    </div>
+    <div class="fecha">Generado: ${now}<br>
+      <button onclick="window.print()" class="no-print"
+        style="margin-top:8px;padding:6px 16px;background:#1a1a2e;color:white;border:none;
+               border-radius:6px;font-size:9pt;cursor:pointer;font-weight:700">🖨️ Imprimir</button>
+    </div>
+  </div>
+
+  <!-- Tarjetas rápidas -->
+  <div class="resumen">
+    <div class="res-card" style="border-color:#90b5e0">
+      <div class="res-val" style="color:#2a4a7a">♂ ${hombres}</div>
+      <div class="res-lbl">Hombres</div>
+    </div>
+    <div class="res-card" style="border-color:#e090b0">
+      <div class="res-val" style="color:#a83a6a">♀ ${mujeres}</div>
+      <div class="res-lbl">Mujeres</div>
+    </div>
+    <div class="res-card" style="border-color:#d4a843">
+      <div class="res-val" style="color:#7a5a00">${total}</div>
+      <div class="res-lbl">Total del grupo</div>
+    </div>
+    <div class="res-card" style="border-color:#90c890">
+      <div class="res-val" style="color:#155724">${conCal}</div>
+      <div class="res-lbl">Con calificación</div>
+    </div>
+  </div>
+
+  <!-- Bloque estadístico -->
+  <div class="stats-box">
+    <h3>Informe estadístico — ${trimLbl}</h3>
+    <div class="stats-grid">
+      <div class="stat-item"><div class="si-val" style="color:#2a4a7a">♂ ${hombres}</div><div class="si-lbl">Hombres</div></div>
+      <div class="stat-item"><div class="si-val" style="color:#a83a6a">♀ ${mujeres}</div><div class="si-lbl">Mujeres</div></div>
+      <div class="stat-item"><div class="si-val">${total}</div><div class="si-lbl">Total del grupo</div></div>
+      <div class="stat-item"><div class="si-val aprobados-color">${aprob}</div><div class="si-lbl">Aprobados</div></div>
+      <div class="stat-item"><div class="si-val reprobados-color">${reprob}</div><div class="si-lbl">Reprobados</div></div>
+      <div class="stat-item"><div class="si-val aprobados-color">${pctA}%</div><div class="si-lbl">% Aprobados</div></div>
+      <div class="stat-item"><div class="si-val reprobados-color">${pctR}%</div><div class="si-lbl">% Reprobados</div></div>
+      <div class="stat-item"><div class="si-val">${sumaStr}</div><div class="si-lbl">Suma de califs.</div></div>
+      <div class="stat-item"><div class="si-val" style="color:#c8422a">${promG}</div><div class="si-lbl">Promedio ${trimLbl}</div></div>
+    </div>
+    <div class="bar" style="margin-top:10px">
+      <div class="bar-inner-a" style="width:${pctA}%"></div>
+      <div class="bar-inner-r" style="width:${pctR}%;float:left"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:8pt;color:#888;margin-top:2px">
+      <span style="color:#155724;font-weight:700">■ Aprobados ${pctA}%</span>
+      <span style="color:#721c24;font-weight:700">■ Reprobados ${pctR}%</span>
+    </div>
+
+    <!-- Promedio por trimestre + promedio final -->
+    <div class="prom-final-box">
+      ${trimsVisibles.map(t => {
+        const alConT = alumnos.filter(a => a['a'+t] !== null);
+        const prom = alConT.length > 0
+          ? (alConT.reduce((s,a)=>s+a['a'+t],0)/alConT.length).toFixed(2)
+          : '—';
+        return `<span class="prom-trim-pill">${_trimLabel(t)}: <strong>${prom}</strong></span>`;
+      }).join('')}
+      <span class="prom-final-pill">Promedio final: <strong>${promFinalGrupo}</strong></span>
+    </div>
+  </div>
+
+  <!-- Lista de alumnos -->
+  <table>
+    <thead><tr>
+      <th class="c" style="width:28px">#</th>
+      <th>Nombre del Alumno</th>
+      <th class="c" style="width:36px">Sexo</th>
+      ${thTrims}
+      <th class="c" style="width:54px;background:#2a3a6a">${trimLbl}</th>
+      <th class="c" style="width:64px;background:#7a5a00">Prom. Final</th>
+      <th class="c" style="width:80px">Estado</th>
+    </tr></thead>
+    <tbody>
+      ${filas || '<tr><td colspan="7" style="text-align:center;color:#bbb;padding:20px">No hay alumnos asignados a este grupo</td></tr>'}
+      ${filaTotal}
+    </tbody>
+  </table>
+
+  <div class="firma-area">
+    <div class="firma">Nombre y firma del docente</div>
+    <div class="firma">Vo. Bo. Dirección</div>
+    <div class="firma">Sello</div>
+  </div>
+
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+function _estToggleGender(sid) {
+  let stu = null;
+  for (const grp of data.groups) {
+    const s = grp.students.find(x => x.id === sid);
+    if (s) { stu = s; break; }
+  }
+  if (!stu) return;
+  const cur = stu.gender || _detectarGenero(stu.name, null);
+  const nextG = (cur === 'M') ? 'F' : 'M';
+  // Propagar a todas las instancias del mismo alumno (por nombre) en todos los grupos/trimestres
+  let count = 0;
+  data.groups.forEach(grp => {
+    grp.students.forEach(s => {
+      if (s.name === stu.name) { s.gender = nextG; count++; }
+    });
+  });
+  autoSave();
+  renderTab();
+  showToast(`Género actualizado: ${nextG === 'M' ? '♂ Hombre' : '♀ Mujer'}${count>1?` (${count} trimestres)`:''}`, 'success');
+}
+
 function renderEstadisticasTab(container) {
-  const g = currentGroup();
-  if (!g.students.length || !g.activities.length) {
-    container.innerHTML = `<div class="empty"><div class="icon">📈</div><p>Necesitas alumnos y actividades para ver las estadísticas.</p></div>`;
+  if (!data.groups.length) {
+    container.innerHTML = `<div class="empty"><div class="icon">📈</div><p>No hay grupos para mostrar.</p></div>`;
     return;
   }
 
-  const PASS = 6; // calificación mínima para aprobar
-  let aprobados = [], reprobados = [], sinCalif = [];
+  // 1. Combinaciones disponibles (grado / nombre / trimestre)
+  const todos = data.groups.map(g => ({
+    g, grado: _gradoFromGroup(g), nombre: g.name, trimestre: g.trimestre || ''
+  }));
 
-  g.students.forEach((s, sIdx) => {
-    const avg = calcAvg(g, s.id);
-    if (avg === null) sinCalif.push({s, avg: null});
-    else if (avg >= PASS) aprobados.push({s, avg});
-    else reprobados.push({s, avg});
+  // 2. Grados únicos y autoselect
+  const grados = [...new Set(todos.map(t => t.grado))].sort();
+  if (!_estState.grado || !grados.includes(_estState.grado)) _estState.grado = grados[0];
+
+  // 3. Secciones (letras) disponibles en el grado seleccionado
+  const letrasDisponibles = _seccionLettersForGrado(_estState.grado, todos);
+  // Opciones del selector "Grupo": Todos · A · B · C · ... · Sin asignar
+  const seccionOpts = ['todos', ...letrasDisponibles, 'sin'];
+  if (!_estState.seccion || !seccionOpts.includes(_estState.seccion)) _estState.seccion = 'todos';
+
+  // 4. Trimestres del grado
+  const enGrado = todos.filter(t => t.grado === _estState.grado);
+  const trimestres = [...new Set(enGrado.map(t => t.trimestre))].sort();
+  if (!_estState.trimestre || !trimestres.includes(_estState.trimestre)) _estState.trimestre = trimestres[0];
+
+  // 5. Grupos relevantes en (grado, trim) — los que contienen la letra seleccionada
+  const enTrim = enGrado.filter(t => t.trimestre === _estState.trimestre);
+  let gruposRelevantes;
+  if (_estState.seccion === 'todos' || _estState.seccion === 'sin') {
+    gruposRelevantes = enTrim;
+  } else {
+    gruposRelevantes = enTrim.filter(t => _parseSeccionesFromGroupName(t.nombre).includes(_estState.seccion));
+    // Si por alguna razón ningún grupo tiene esa letra parseada, usar todos los del trim
+    if (!gruposRelevantes.length) gruposRelevantes = enTrim;
+  }
+
+  if (!gruposRelevantes.length) {
+    container.innerHTML = `<div class="empty"><p>No hay grupos para esta combinación.</p></div>`;
+    return;
+  }
+
+  // 6. Recolectar alumnos de todos los grupos relevantes (sin duplicados por nombre)
+  const PASS = 6;
+  const vistos = new Set();
+  const allAlumnos = [];
+  gruposRelevantes.forEach(rel => {
+    rel.g.students.filter(s => !s.inactive).forEach(s => {
+      if (vistos.has(s.name)) return; // evitar duplicados si un grupo se repite
+      vistos.add(s.name);
+      const gen = _detectarGenero(s.name, s);
+      const avg = calcAvg(rel.g, s.id);
+      allAlumnos.push({ s, gen, avg, grupoSrc: rel.g });
+    });
   });
 
-  const total = g.students.length;
-  const conCalif = aprobados.length + reprobados.length;
-  const pctAprobados = conCalif > 0 ? (aprobados.length / conCalif * 100).toFixed(1) : '—';
-  const pctReprobados = conCalif > 0 ? (reprobados.length / conCalif * 100).toFixed(1) : '—';
-  const promedioGrupo = conCalif > 0
-    ? (aprobados.concat(reprobados).reduce((s,x)=>s+x.avg,0) / conCalif).toFixed(2)
-    : '—';
+  // 7. Filtrar según sección seleccionada
+  let alumnos;
+  if (_estState.seccion === 'todos') {
+    alumnos = allAlumnos;
+  } else if (_estState.seccion === 'sin') {
+    alumnos = allAlumnos.filter(a => !a.s.seccion);
+  } else {
+    alumnos = allAlumnos.filter(a => a.s.seccion === _estState.seccion);
+  }
 
-  const barAprobados = conCalif > 0 ? (aprobados.length / conCalif * 100) : 0;
-  const barReprobados = conCalif > 0 ? (reprobados.length / conCalif * 100) : 0;
-
-  // Distribution buckets: 0-5, 6-6.9, 7-7.9, 8-8.9, 9-10
-  const buckets = [
-    { label:'0 – 5.9', color:'#e74c3c', count:0 },
-    { label:'6 – 6.9', color:'#e67e22', count:0 },
-    { label:'7 – 7.9', color:'#f1c40f', count:0 },
-    { label:'8 – 8.9', color:'#2ecc71', count:0 },
-    { label:'9 – 10',  color:'#27ae60', count:0 },
-  ];
-  aprobados.concat(reprobados).forEach(({avg}) => {
-    if (avg < 6) buckets[0].count++;
-    else if (avg < 7) buckets[1].count++;
-    else if (avg < 8) buckets[2].count++;
-    else if (avg < 9) buckets[3].count++;
-    else buckets[4].count++;
+  // 8. Ordenar por sección (A, B, C, …, sin), luego por nombre
+  alumnos.sort((a, b) => {
+    const sA = a.s.seccion || 'ZZZ';
+    const sB = b.s.seccion || 'ZZZ';
+    if (sA !== sB) return sA.localeCompare(sB);
+    return a.s.name.localeCompare(b.s.name, 'es');
   });
-  const maxBucket = Math.max(...buckets.map(b=>b.count), 1);
 
-  let html = `<div style="display:flex;flex-direction:column;gap:20px;">`;
+  // 9. Estadísticas sobre los alumnos visibles
+  let hombres = 0, mujeres = 0, indef = 0;
+  let aprob = 0, reprob = 0, sinCal = 0;
+  let suma = 0, conCal = 0;
+  alumnos.forEach(a => {
+    if (a.gen === 'M') hombres++;
+    else if (a.gen === 'F') mujeres++;
+    else indef++;
+    if (a.avg === null) sinCal++;
+    else { suma += a.avg; conCal++; if (a.avg >= PASS) aprob++; else reprob++; }
+  });
+  const total = alumnos.length;
+  const pctA = conCal > 0 ? (aprob/conCal*100) : 0;
+  const pctR = conCal > 0 ? (reprob/conCal*100) : 0;
+  const promG = conCal > 0 ? (suma/conCal) : 0;
 
-  // ── BIG STAT CARDS ──
-  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;">
-    <div class="stat-card green" style="text-align:center">
-      <div class="stat-label">✅ Aprobados</div>
-      <div class="stat-value">${aprobados.length}</div>
-      <div class="stat-sub">${pctAprobados}% del grupo</div>
+  // 10. Promedio por trimestre — para la MISMA sección a través de los 3 trimestres
+  const promPorTrim = {};
+  ['1','2','3',''].forEach(t => {
+    const gTrim = enGrado.filter(x => x.trimestre === t);
+    let relTrim;
+    if (_estState.seccion === 'todos' || _estState.seccion === 'sin') {
+      relTrim = gTrim;
+    } else {
+      relTrim = gTrim.filter(x => _parseSeccionesFromGroupName(x.nombre).includes(_estState.seccion));
+      if (!relTrim.length) relTrim = gTrim;
+    }
+    const vistosT = new Set();
+    let s = 0, n = 0;
+    relTrim.forEach(rel => {
+      rel.g.students.filter(s2 => !s2.inactive).forEach(s2 => {
+        if (vistosT.has(s2.name)) return;
+        vistosT.add(s2.name);
+        // Filtrar por sección
+        if (_estState.seccion === 'sin' && s2.seccion) return;
+        if (_estState.seccion !== 'todos' && _estState.seccion !== 'sin' && s2.seccion !== _estState.seccion) return;
+        const a = calcAvg(rel.g, s2.id);
+        if (a !== null) { s += a; n++; }
+      });
+    });
+    if (n > 0) promPorTrim[t] = s / n;
+  });
+
+  // 11. Render
+  // Banner si hay alumnos sin sección y no estamos en "todos"/"sin"
+  const sinSeccionCount = allAlumnos.filter(a => !a.s.seccion).length;
+  const showAssignBanner = sinSeccionCount > 0 && letrasDisponibles.length > 0;
+
+  // Label de la sección actual para el header
+  let seccionLbl;
+  if (_estState.seccion === 'todos') seccionLbl = 'Todas las secciones';
+  else if (_estState.seccion === 'sin') seccionLbl = 'Sin sección asignada';
+  else seccionLbl = `Sección ${_estState.seccion}`;
+
+  let html = `
+  <style>
+    .est-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: white; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+    .est-bar-lbl { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #888; white-space: nowrap; }
+    .est-bar-pair { display: flex; align-items: center; gap: 6px; }
+    .est-bar-pair > span { font-size: 0.78rem; color: #666; font-weight: 600; }
+    .est-select { padding: 7px 14px; border: 1.5px solid var(--border); border-radius: 6px; font-family: 'DM Sans',sans-serif; font-size: 0.9rem; font-weight: 600; color: var(--ink); background: white; cursor: pointer; outline: none; min-width: 140px; }
+    .est-select:focus { border-color: var(--accent); }
+    .est-card { background: white; border: 1.5px solid var(--border); border-radius: 10px; padding: 16px 12px 12px; text-align: center; position: relative; overflow: hidden; }
+    .est-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; }
+    .est-card-val { font-family: 'DM Serif Display', serif; font-size: 1.75rem; line-height: 1.05; margin-bottom: 4px; }
+    .est-card-lbl { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #888; }
+    .est-c-h::before { background: #3a6aaa; } .est-c-h .est-card-val { color: #2a4a7a; }
+    .est-c-m::before { background: #d4628a; } .est-c-m .est-card-val { color: #a83a6a; }
+    .est-c-t::before { background: var(--gold); } .est-c-t .est-card-val { color: #b89020; }
+    .est-c-a::before { background: var(--green); } .est-c-a .est-card-val { color: #1a6640; }
+    .est-c-r::before { background: var(--danger); } .est-c-r .est-card-val { color: #a83020; }
+    .est-c-pa::before { background: #5aaa6a; } .est-c-pa .est-card-val { color: #2a7a3a; }
+    .est-c-pr::before { background: #d47a4a; } .est-c-pr .est-card-val { color: #a85a2a; }
+    .est-c-s::before { background: #888; } .est-c-s .est-card-val { color: #555; }
+    .est-c-p::before { background: var(--accent); } .est-c-p .est-card-val { color: var(--accent); }
+    .est-row-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px; }
+    .est-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    @media (max-width: 1000px) { .est-row-5 { grid-template-columns: repeat(3, 1fr); } .est-row-4 { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .est-row-5, .est-row-4 { grid-template-columns: repeat(2, 1fr); } }
+    .est-trim-row { background: white; border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .est-trim-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; background: var(--cream); border: 1px solid var(--border); font-size: 0.82rem; font-weight: 600; color: #555; }
+    .est-trim-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .est-trim-pill strong { font-family: 'DM Serif Display', serif; font-size: 0.95rem; }
+    .est-table-wrap { background: white; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .est-table-head { background: var(--ink); padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .est-table-title { font-family: 'DM Serif Display', serif; color: white; font-size: 1.05rem; }
+    .est-table-hint { font-size: 0.7rem; color: rgba(255,255,255,0.55); }
+    .est-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .est-table th { background: #f5f0e8; padding: 9px 14px; text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: #888; font-weight: 700; }
+    .est-table th.c, .est-table td.c { text-align: center; }
+    .est-table td { padding: 9px 14px; border-bottom: 1px solid var(--cream); }
+    .est-table tr:last-child td { border-bottom: none; }
+    .est-table tr:hover td { background: #f7f4ef; }
+    .est-gen-btn { background: none; border: 1.5px solid transparent; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.05rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; font-weight: 700; transition: all 0.15s; }
+    .est-gen-btn:hover { transform: scale(1.12); box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
+    .est-gen-h { color: #2a4a7a; background: #e0e8f5; }
+    .est-gen-m { color: #a83a6a; background: #f5dde6; }
+    .est-gen-x { color: #bbb; background: #f0f0f0; }
+    .est-sec-btn { border: 1.5px solid; border-radius: 8px; width: 32px; height: 28px; cursor: pointer; font-family: 'DM Sans',sans-serif; font-size: 0.85rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; padding: 0; transition: all 0.15s; }
+    .est-sec-btn:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    .est-banner { background: #fff8e6; border: 1.5px solid #f0c060; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; font-size: 0.85rem; color: #7a5a00; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .est-section-divider td { background: #f5f0e8; padding: 4px 14px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: #888; border-top: 2px solid var(--border); }
+  </style>
+
+  <!-- Selector: Grado / Grupo (letra) / Trimestre -->
+  <div class="est-bar">
+    <span class="est-bar-lbl">📊 Selecciona:</span>
+    <div class="est-bar-pair">
+      <span>Grado</span>
+      <select class="est-select" onchange="_estChange('grado',this.value)">
+        ${grados.map(gr => `<option value="${gr}" ${gr===_estState.grado?'selected':''}>${_gradoLabel(gr)}</option>`).join('')}
+      </select>
     </div>
-    <div class="stat-card accent" style="text-align:center">
-      <div class="stat-label">❌ Reprobados</div>
-      <div class="stat-value">${reprobados.length}</div>
-      <div class="stat-sub">${pctReprobados}% del grupo</div>
+    <div class="est-bar-pair">
+      <span>Grupo</span>
+      <select class="est-select" onchange="_estChange('seccion',this.value)">
+        <option value="todos" ${_estState.seccion==='todos'?'selected':''}>Todos</option>
+        ${letrasDisponibles.map(l => `<option value="${l}" ${l===_estState.seccion?'selected':''}>Grupo ${l}</option>`).join('')}
+        <option value="sin" ${_estState.seccion==='sin'?'selected':''}>Sin asignar</option>
+      </select>
     </div>
-    <div class="stat-card gold" style="text-align:center">
-      <div class="stat-label">📊 Promedio Grupo</div>
-      <div class="stat-value">${promedioGrupo}</div>
-      <div class="stat-sub">calificación promedio</div>
+    <div class="est-bar-pair">
+      <span>Trimestre</span>
+      <select class="est-select" onchange="_estChange('trimestre',this.value)">
+        ${trimestres.map(t => `<option value="${t}" ${t===_estState.trimestre?'selected':''}>${_trimLabel(t)}</option>`).join('')}
+      </select>
     </div>
-    <div class="stat-card blue" style="text-align:center">
-      <div class="stat-label">📋 Total Alumnos</div>
-      <div class="stat-value">${total}</div>
-      <div class="stat-sub">${sinCalif.length} sin calificación</div>
+    <button onclick="_abrirClasificadorRapido()"
+      style="margin-left:auto;padding:7px 16px;background:var(--ink);color:white;border:none;
+             border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;
+             display:flex;align-items:center;gap:6px;white-space:nowrap">
+      ✏️ Clasificar A / B / C
+    </button>
+  </div>
+
+  ${showAssignBanner ? `
+  <div class="est-banner">
+    <div>
+      <strong>⚠️ ${sinSeccionCount} alumno${sinSeccionCount===1?'':'s'} sin sección asignada.</strong>
+      Haz clic en el badge gris "?" junto a su nombre para asignarles A, B, C…
+      ${letrasDisponibles.length ? `Letras disponibles: <strong>${letrasDisponibles.join(', ')}</strong>` : ''}
     </div>
+    ${_estState.seccion !== 'sin' ? `<button onclick="_estChange('seccion','sin')" style="padding:5px 12px;background:#b85c00;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap">Ver sin asignar →</button>` : ''}
+  </div>
+  ` : ''}
+
+  <!-- Fila 1: Hombres, Mujeres, Total, Aprobados, Reprobados -->
+  <div class="est-row-5">
+    <div class="est-card est-c-h">
+      <div class="est-card-val">♂ ${hombres}</div>
+      <div class="est-card-lbl">Hombres</div>
+    </div>
+    <div class="est-card est-c-m">
+      <div class="est-card-val">♀ ${mujeres}</div>
+      <div class="est-card-lbl">Mujeres</div>
+    </div>
+    <div class="est-card est-c-t">
+      <div class="est-card-val">${total}</div>
+      <div class="est-card-lbl">Total del grupo${indef>0?` <span style="color:#bbb;font-weight:500">(${indef}?)</span>`:''}</div>
+    </div>
+    <div class="est-card est-c-a">
+      <div class="est-card-val">${aprob}</div>
+      <div class="est-card-lbl">Aprobados</div>
+    </div>
+    <div class="est-card est-c-r">
+      <div class="est-card-val">${reprob}</div>
+      <div class="est-card-lbl">Reprobados</div>
+    </div>
+  </div>
+
+  <!-- Fila 2: % Aprob, % Reprob, Suma, Promedio -->
+  <div class="est-row-4">
+    <div class="est-card est-c-pa">
+      <div class="est-card-val">${pctA.toFixed(1)}%</div>
+      <div class="est-card-lbl">% Aprobados</div>
+    </div>
+    <div class="est-card est-c-pr">
+      <div class="est-card-val">${pctR.toFixed(1)}%</div>
+      <div class="est-card-lbl">% Reprobados</div>
+    </div>
+    <div class="est-card est-c-s">
+      <div class="est-card-val">${suma.toFixed(1)}</div>
+      <div class="est-card-lbl">Suma de calificaciones</div>
+    </div>
+    <div class="est-card est-c-p">
+      <div class="est-card-val">${promG.toFixed(2)}</div>
+      <div class="est-card-lbl">Promedio del grupo</div>
+    </div>
+  </div>
+
+  ${Object.keys(promPorTrim).length > 0 ? (() => {
+    const vals = ['1','2','3',''].map(t => promPorTrim[t]).filter(v => v !== undefined);
+    const promGeneral = vals.length > 0 ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    return `
+  <div class="est-trim-row">
+    <span class="est-bar-lbl">Promedio por trimestre:</span>
+    ${['1','2','3',''].map(t => promPorTrim[t]!==undefined ? `<span class="est-trim-pill ${t===_estState.trimestre?'active':''}">${_trimLabel(t)}: <strong>${promPorTrim[t].toFixed(2)}</strong></span>` : '').join('')}
+    ${promGeneral !== null && vals.length > 1 ? `<span class="est-trim-pill" style="margin-left:auto;background:var(--ink);color:var(--gold);border-color:var(--ink);font-weight:800">Promedio final: <strong style="font-size:1rem">${promGeneral.toFixed(2)}</strong></span>` : ''}
   </div>`;
+  })() : ''}
 
-  // ── STUDENT LISTS ──
-  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">`;
+  <!-- Lista de alumnos -->
+  <div class="est-table-wrap">
+    <div class="est-table-head">
+      <div class="est-table-title">${escHtml(seccionLbl)} — ${alumnos.length} alumno${alumnos.length===1?'':'s'}</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${_estState.seccion !== 'todos' && _estState.seccion !== 'sin' ? `
+        <button onclick="_imprimirReporteGrupo('${_estState.seccion}','${_estState.trimestre}','${_estState.grado}')"
+          style="padding:5px 14px;background:var(--accent);color:white;border:none;border-radius:6px;
+                 font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer;
+                 display:flex;align-items:center;gap:5px;white-space:nowrap">
+          🖨️ Imprimir reporte
+        </button>` : ''}
+        <div class="est-table-hint">Clic en A/B/C/? para reasignar grupo · Clic en ♂/♀ para género</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="est-table">
+        <thead><tr>
+          <th>#</th>
+          <th>Alumno</th>
+          <th class="c">Grupo</th>
+          <th class="c">Género</th>
+          <th class="c">Calificación</th>
+          <th class="c">Estado</th>
+        </tr></thead>
+        <tbody>`;
 
-  // Aprobados list
-  html += `<div style="background:white;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;">
-    <div style="background:#2a7a4b;padding:10px 16px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:white">✅ Alumnos Aprobados (${aprobados.length})</div>`;
-  if (aprobados.length) {
-    aprobados.sort((a,b)=>b.avg-a.avg).forEach(({s,avg})=>{
-      const cls = gradeClass(roundStudentAvg(avg)||avg);
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--cream);font-size:0.85rem">
-        <span>${escHtml(s.name)}</span>
-        <span class="grade-badge ${cls}" style="padding:2px 8px">${formatStudentAvg(avg)}</span>
-      </div>`;
-    });
+  if (alumnos.length === 0) {
+    html += `<tr><td colspan="6" style="text-align:center;color:#bbb;padding:30px">${_estState.seccion!=='todos'&&_estState.seccion!=='sin'?`No hay alumnos asignados a la sección <strong>${_estState.seccion}</strong>. Cambia a "Todos" o "Sin asignar" arriba para verlos y asignarles sección.`:'No hay alumnos activos en este grupo.'}</td></tr>`;
   } else {
-    html += `<div style="padding:16px;color:#bbb;font-size:0.85rem;text-align:center">Ninguno</div>`;
-  }
-  html += `</div>`;
+    let lastSeccion = null;
+    alumnos.forEach((a, i) => {
+      const curSec = a.s.seccion || '';
+      // Divisor cuando cambia la sección (solo si estamos en "todos" o "sin")
+      if ((_estState.seccion === 'todos' || _estState.seccion === 'sin') && curSec !== lastSeccion) {
+        const label = curSec ? `── Grupo ${curSec} ──` : '── Sin sección asignada ──';
+        html += `<tr class="est-section-divider"><td colspan="6">${label}</td></tr>`;
+        lastSeccion = curSec;
+      }
+      const cls = a.avg !== null ? gradeClass(roundStudentAvg(a.avg) || a.avg) : '';
+      const status = a.avg === null
+        ? `<span style="color:#bbb;font-size:0.78rem">Sin calificación</span>`
+        : a.avg >= PASS
+          ? `<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✓ Aprobado</span>`
+          : `<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✗ Reprobado</span>`;
+      const genIcon  = a.gen === 'M' ? '♂' : a.gen === 'F' ? '♀' : '?';
+      const genCls   = a.gen === 'M' ? 'est-gen-h' : a.gen === 'F' ? 'est-gen-m' : 'est-gen-x';
+      const genTitle = a.gen === 'M' ? 'Hombre — clic para cambiar a mujer' : a.gen === 'F' ? 'Mujer — clic para cambiar a hombre' : 'Sin definir — clic para asignar';
 
-  // Reprobados list
-  html += `<div style="background:white;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;">
-    <div style="background:var(--danger);padding:10px 16px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:white">❌ Alumnos Reprobados (${reprobados.length})</div>`;
-  if (reprobados.length) {
-    reprobados.sort((a,b)=>b.avg-a.avg).forEach(({s,avg})=>{
-      const cls = gradeClass(roundStudentAvg(avg)||avg);
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--cream);font-size:0.85rem">
-        <span>${escHtml(s.name)}</span>
-        <span class="grade-badge ${cls}" style="padding:2px 8px">${formatStudentAvg(avg)}</span>
-      </div>`;
+      const sec = a.s.seccion || '';
+      const sStyle = _seccionStyle(sec);
+      const secTitle = sec ? `Grupo ${sec} — clic para cambiar` : 'Sin asignar — clic para asignar grupo';
+      const secBtn = `<button class="est-sec-btn" style="background:${sStyle.bg};color:${sStyle.fg};border-color:${sStyle.border}" title="${secTitle}" onclick="_cycleStudentSeccion('${a.s.id}')">${sec || '?'}</button>`;
+
+      html += `<tr>
+        <td style="color:#aaa;font-size:0.78rem">${i + 1}</td>
+        <td style="font-weight:500">${escHtml(a.s.name)}</td>
+        <td class="c">${secBtn}</td>
+        <td class="c"><button class="est-gen-btn ${genCls}" title="${genTitle}" onclick="_estToggleGender('${a.s.id}')">${genIcon}</button></td>
+        <td class="c">${a.avg !== null ? `<span class="grade-badge ${cls}" style="padding:3px 12px">${formatStudentAvg(a.avg)}</span>` : '<span style="color:#ccc">—</span>'}</td>
+        <td class="c">${status}</td>
+      </tr>`;
     });
-  } else {
-    html += `<div style="padding:16px;color:#bbb;font-size:0.85rem;text-align:center">Ninguno 🎉</div>`;
-  }
-  html += `</div>`;
-
-  html += `</div>`; // close grid
-
-  // ── SIN CALIFICACIÓN ──
-  if (sinCalif.length) {
-    html += `<div style="background:white;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;">
-      <div style="background:#888;padding:10px 16px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:white">⚠️ Sin Calificación Registrada (${sinCalif.length})</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;">`;
-    sinCalif.forEach(({s})=>{
-      html += `<span style="background:var(--cream);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.82rem">${escHtml(s.name)}</span>`;
-    });
-    html += `</div></div>`;
   }
 
-  html += `</div>`; // close outer flex
+  html += `
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `;
+
   container.innerHTML = html;
 }
+
 
 // ---- REPORTE GENERAL ----
 // ---- REPORTE FINAL TAB ----
