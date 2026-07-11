@@ -7841,6 +7841,65 @@ function fbInit() {
 }
 
 // ── Guardar TODO en Firebase (llamado desde saveAll) ──────────────────────
+// ── Ayuda cuando Firebase rechaza el guardado por permisos ────────────────
+// Esto NO es un error de la app: son las Reglas de Seguridad del proyecto
+// Firebase, que Google expira automáticamente 30 días después de crearlo
+// (modo de prueba). Tus datos SIEMPRE quedan a salvo en este dispositivo
+// (localStorage) aunque la nube rechace el guardado.
+function _mostrarAyudaPermisosFirebase() {
+  const existing = document.getElementById('_permisosFbModal');
+  if (existing) existing.remove();
+
+  const projectId = (FB.config && FB.config.projectId) || '';
+  const consoleUrl = projectId
+    ? `https://console.firebase.google.com/project/${projectId}/database/${projectId}-default-rtdb/rules`
+    : 'https://console.firebase.google.com/';
+
+  const modal = document.createElement('div');
+  modal.id = '_permisosFbModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,26,46,0.6);z-index:700;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:14px;width:520px;max-width:96vw;box-shadow:0 24px 64px rgba(0,0,0,0.3);overflow:hidden">
+      <div style="background:linear-gradient(135deg,#c0392b,#e74c3c);padding:18px 22px">
+        <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;color:white">🔒 Firebase rechazó el guardado</div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.85);margin-top:3px">No es un error de la app — son los permisos de tu base de datos</div>
+      </div>
+      <div style="padding:20px 22px">
+        <div style="background:#e8f5e9;border:1.5px solid #a5d6a7;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:0.85rem;color:#1b5e20">
+          ✅ Tranquilo: tus cambios de hoy <strong>ya están guardados en este dispositivo</strong>. No se perdió nada.
+        </div>
+        <p style="font-size:0.88rem;color:#444;line-height:1.6;margin-bottom:12px">
+          Firebase crea las bases de datos nuevas en <strong>"modo de prueba"</strong>, que deja de aceptar
+          cambios automáticamente <strong>30 días después de creada</strong> — por seguridad. Para arreglarlo:
+        </p>
+        <ol style="font-size:0.85rem;color:#444;line-height:1.9;padding-left:20px;margin-bottom:16px">
+          <li>Abre la consola de Firebase (botón de abajo)</li>
+          <li>Ve a <strong>Realtime Database → pestaña "Reglas"</strong></li>
+          <li>Reemplaza el contenido por:</li>
+        </ol>
+        <pre style="background:#1a1a2e;color:#a8e6a3;padding:12px 14px;border-radius:8px;font-size:0.8rem;overflow-x:auto;margin-bottom:14px">{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}</pre>
+        <p style="font-size:0.78rem;color:#888;line-height:1.5;margin-bottom:16px">
+          4. Presiona <strong>"Publicar"</strong> — listo, tu app volverá a sincronizar normalmente.
+        </p>
+        <a href="${consoleUrl}" target="_blank" rel="noopener"
+          style="display:block;text-align:center;padding:11px;background:#f57c00;color:white;
+                 text-decoration:none;border-radius:8px;font-weight:700;font-size:0.9rem;margin-bottom:10px">
+          🔗 Abrir Reglas de Firebase
+        </a>
+        <button onclick="document.getElementById('_permisosFbModal').remove()"
+          style="width:100%;padding:9px;background:none;border:1.5px solid #ddd;border-radius:8px;
+                 color:#888;font-family:inherit;font-size:0.85rem;cursor:pointer">Cerrar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
 function fbGuardar() {
   if (FB.status !== 'connected' || !FB.ref) return false;
   try {
@@ -7858,7 +7917,11 @@ function fbGuardar() {
       _markClean(); // Firebase confirmó — todo está guardado
       fbRefreshUI();
     }).catch(e => {
-      showToast('⚠️ Firebase: ' + e.message + ' — datos guardados localmente', 'error');
+      if (String(e.message).includes('PERMISSION_DENIED')) {
+        _mostrarAyudaPermisosFirebase();
+      } else {
+        showToast('⚠️ Firebase: ' + e.message + ' — datos guardados localmente', 'error');
+      }
       _markDirty();
     });
     return true;
