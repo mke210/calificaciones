@@ -1642,6 +1642,7 @@ function _renderMainInner() {
       <button class="tab ${currentTab==='estadisticas'?'active':''}" onclick="switchTab('estadisticas')">📈 Estadísticas</button>
       <button class="tab ${currentTab==='reporte_final'?'active':''}" onclick="switchTab('reporte_final')">🏆 Reporte Final</button>
       <button class="tab ${currentTab==='asistencia'?'active':''}" onclick="switchTab('asistencia')" style="color:${currentTab==='asistencia'?'var(--green)':''};border-bottom-color:${currentTab==='asistencia'?'var(--green)':' transparent'}">✅ Asistencia</button>
+      <button class="tab ${currentTab==='informes'?'active':''}" onclick="switchTab('informes')" style="color:${currentTab==='informes'?'#7a5a00':''};border-bottom-color:${currentTab==='informes'?'#d4a843':' transparent'}">🖨️ Informes Finales</button>
       <button class="tab ${currentTab==='ajustes'?'active':''}" onclick="switchTab('ajustes')">⚙️ Ajustes</button>
     </div>
     <div id="tabContent"></div>`;
@@ -1657,6 +1658,7 @@ function renderTab() {
   else if (currentTab==='estadisticas') renderEstadisticasTab(c);
   else if (currentTab==='reporte_final') renderReporteFinal(c);
   else if (currentTab==='asistencia') renderAsistenciaTab(c);
+  else if (currentTab==='informes') renderInformesFinalesTab(c);
   else if (currentTab==='ajustes') renderSettingsTab(c);
 }
 
@@ -4248,6 +4250,625 @@ function p2pOlvidarRemoto() {
 // ════════════════════════════════════════════════════════════════════════════
 // RENDER DE LA PESTAÑA DE AJUSTES
 // ════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════
+// ---- INFORMES FINALES TAB (formato oficial IEEPO — solo para imprimir) ----
+// ════════════════════════════════════════════════════════════════════════
+
+// Configuración persistente del encabezado oficial (se guarda una sola vez)
+function _infDefaultConfig() {
+  return {
+    instituto: 'INSTITUTO ESTATAL DE EDUCACIÓN PÚBLICA DE OAXACA',
+    cct: '',
+    unidad: 'UNIDAD DE EDUCACIÓN SECUNDARIA',
+    tipoEscuelas: 'ESCUELAS SECUNDARIAS GENERALES',
+    zona: '',
+    cicloEscolar: '',
+    turno: 'MATUTINO',
+    docente: '',
+    escuela: '',
+  };
+}
+
+function _infGetConfig() {
+  if (!data.informeConfig) data.informeConfig = _infDefaultConfig();
+  // Rellenar campos faltantes si se agregó alguno nuevo en versiones futuras
+  const def = _infDefaultConfig();
+  Object.keys(def).forEach(k => { if (data.informeConfig[k] === undefined) data.informeConfig[k] = def[k]; });
+  return data.informeConfig;
+}
+
+function _infSetConfig(field, val) {
+  const cfg = _infGetConfig();
+  cfg[field] = val;
+  autoSave();
+}
+
+// Trunca (no redondea) a 1 decimal — igual que TRUNC(x,1) en Excel,
+// que es exactamente la fórmula que usa el formato oficial IEEPO.
+function _infTrunc1(v) {
+  if (v === null || v === undefined || isNaN(v)) return null;
+  return Math.trunc(v * 10) / 10;
+}
+
+// Recolecta todos los combos (Asignatura, Grado, Sección) detectados,
+// usando la clasificación A/B/C que ya hiciste en Estadísticas.
+function _infRecolectarCombos() {
+  const todos = data.groups.map(g => ({
+    g, grado: _gradoFromGroup(g), nombre: g.name, trimestre: g.trimestre || ''
+  }));
+  const grados = [...new Set(todos.map(t => t.grado))].filter(gr => gr !== '?').sort();
+
+  const combos = [];
+  let sinClasificarTotal = 0;
+  const sinClasificarDetalle = []; // { name, grado, sid, posiblesDuplicados:[...] }
+
+  grados.forEach(grado => {
+    const enGrado = todos.filter(t => t.grado === grado);
+    const letras = _seccionLettersForGrado(grado, todos);
+
+    // Alumnos únicos (por nombre EXACTO) de este grado, de cualquier trimestre
+    const vistos = new Set();
+    const alumnosGrado = [];
+    enGrado.forEach(rel => {
+      rel.g.students.filter(s => !s.inactive).forEach(s => {
+        if (vistos.has(s.name)) return;
+        vistos.add(s.name);
+        alumnosGrado.push({ s, gSrc: rel.g });
+      });
+    });
+
+    const sinClasif = alumnosGrado.filter(a => !a.s.seccion);
+    sinClasificarTotal += sinClasif.length;
+
+    // Detectar si un alumno "sin clasificar" es en realidad el mismo alumno que
+    // otro YA clasificado, pero con el nombre escrito ligeramente distinto
+    // (espacio extra, mayúsculas, acento, apodo vs nombre completo, etc.)
+    const clasificados = alumnosGrado.filter(a => a.s.seccion);
+    sinClasif.forEach(a => {
+      const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+      const nA = norm(a.s.name);
+      const posibles = clasificados.filter(c => {
+        const nC = norm(c.s.name);
+        if (nA === nC) return true; // idéntico salvo mayúsculas/acentos/espacios
+        // Un nombre contiene al otro (apodo vs nombre completo), ej "Berenice" vs "Ariadna Berenice"
+        const partsA = nA.split(' '), partsC = nC.split(' ');
+        return partsA.some(p => p.length > 3 && partsC.includes(p));
+      }).map(c => c.s.name);
+      sinClasificarDetalle.push({ name: a.s.name, grado, sid: a.s.id, posibles });
+    });
+
+    if (!letras.length) return; // sin clasificar, no se puede generar fila para este grado
+
+    letras.forEach(letra => {
+      const alumnosSeccion = alumnosGrado.filter(a => a.s.seccion === letra);
+      if (!alumnosSeccion.length) return;
+
+      // Asignatura: toma la del primer grupo relevante para este grado
+      const grupoRef = enGrado.find(t => _parseSeccionesFromGroupName(t.nombre).includes(letra)) || enGrado[0];
+      const asignatura = (grupoRef.g.subject || grupoRef.g.name || '').toUpperCase();
+
+      // Promedio por periodo (1,2,3): promedio del grupo en esa sección, truncado a 1 decimal
+      const periodos = {};
+      ['1','2','3'].forEach(t => {
+        const gTrim = enGrado.filter(x => x.trimestre === t);
+        let suma = 0, cnt = 0;
+        const vistosT = new Set();
+        gTrim.forEach(rel => {
+          rel.g.students.filter(s2 => !s2.inactive && s2.seccion === letra).forEach(s2 => {
+            if (vistosT.has(s2.name)) return;
+            vistosT.add(s2.name);
+            const a = calcAvg(rel.g, s2.id);
+            if (a !== null) { suma += a; cnt++; }
+          });
+        });
+        periodos[t] = cnt > 0 ? _infTrunc1(suma / cnt) : null;
+      });
+
+      // Promedio final = TRUNC(promedio de los periodos disponibles, 1) — igual que la fórmula oficial
+      const periodVals = ['1','2','3'].map(t => periodos[t]).filter(v => v !== null);
+      const promedio = periodVals.length ? _infTrunc1(periodVals.reduce((s,v)=>s+v,0) / periodVals.length) : null;
+
+      // Aprobados/Reprobados: promedio final POR ALUMNO (promedio de sus periodos disponibles) >= 6
+      const PASS = 6;
+      let aprobados = 0;
+      alumnosSeccion.forEach(a => {
+        const vals = ['1','2','3'].map(t => {
+          const gTrim = enGrado.filter(x => x.trimestre === t);
+          for (const rel of gTrim) {
+            const stu = rel.g.students.find(s2 => s2.name === a.s.name && !s2.inactive);
+            if (stu) { const av = calcAvg(rel.g, stu.id); if (av !== null) return av; }
+          }
+          return null;
+        }).filter(v => v !== null);
+        const propio = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+        if (propio !== null && propio >= PASS) aprobados++;
+      });
+      const existencia = alumnosSeccion.length;
+      const reprobados = existencia - aprobados;
+      const pctAprob = existencia > 0 ? _infTrunc1((aprobados/existencia)*100) : 0;
+      const pctReprob = existencia > 0 ? _infTrunc1((reprobados/existencia)*100) : 0;
+
+      combos.push({ asignatura, grado, seccion: letra, existencia, periodos, promedio, aprobados, reprobados, pctAprob, pctReprob });
+    });
+  });
+
+  combos.sort((a,b) => a.grado===b.grado ? a.seccion.localeCompare(b.seccion) : a.grado.localeCompare(b.grado));
+  return { combos, sinClasificarTotal, sinClasificarDetalle, grados };
+}
+
+function renderInformesFinalesTab(container) {
+  if (!data.groups.length) {
+    container.innerHTML = `<div class="empty"><div class="icon">🖨️</div><p>No hay grupos registrados.</p></div>`;
+    return;
+  }
+  const cfg = _infGetConfig();
+  const { combos, sinClasificarTotal, sinClasificarDetalle } = _infRecolectarCombos();
+
+  let html = `
+  <style>
+    .inf-panel { background:white;border:1.5px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:14px; }
+    .inf-panel h3 { font-family:'DM Serif Display',serif;font-size:1.05rem;margin-bottom:12px;display:flex;align-items:center;gap:8px; }
+    .inf-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px; }
+    .inf-field label { display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:5px; }
+    .inf-field input { width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.86rem;outline:none;box-sizing:border-box; }
+    .inf-field input:focus { border-color:var(--accent); }
+    @media (max-width:900px) { .inf-grid { grid-template-columns:repeat(2,1fr); } }
+    @media (max-width:600px) { .inf-grid { grid-template-columns:1fr; } }
+    .inf-banner { background:#fff8e6;border:1.5px solid #f0c060;border-radius:8px;padding:10px 16px;margin-bottom:14px;font-size:0.85rem;color:#7a5a00; }
+    .inf-table { width:100%;border-collapse:collapse;font-size:0.85rem; }
+    .inf-table th { background:#f5f0e8;padding:8px 10px;font-size:0.66rem;text-transform:uppercase;color:#888;font-weight:700;text-align:center; }
+    .inf-table td { padding:7px 10px;text-align:center;border-bottom:1px solid var(--cream); }
+    .inf-table td:nth-child(1) { text-align:left;font-weight:500; }
+    .inf-table tr:hover td { background:#faf8f4; }
+    .inf-print-btn { padding:11px 28px;background:var(--ink);color:#d4a843;border:none;border-radius:9px;font-family:inherit;font-size:0.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px; }
+    .inf-print-btn:hover { background:#2a2a4e; }
+  </style>
+
+  <div class="inf-panel" style="background:linear-gradient(135deg,#f5f0e8,#efe6d8);border-color:#d4a843">
+    <h3>🖨️ Informe Estadístico del Docente (formato oficial IEEPO)</h3>
+    <p style="font-size:0.85rem;color:#7a5a00;line-height:1.5">
+      Esta pestaña genera el documento oficial para imprimir y entregar a dirección: <strong>HOJA 1</strong> (calificaciones periódicas y promedio)
+      y <strong>HOJA 2</strong> (porcentajes de aprobados y reprobados). Los datos se calculan automáticamente a partir de tus calificaciones
+      y de la clasificación por grupo (A/B/C) que hiciste en <strong>Estadísticas</strong>.
+    </p>
+  </div>
+
+  ${sinClasificarTotal > 0 ? `
+  <div class="inf-banner">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:${sinClasificarDetalle.length?'10px':'0'}">
+      <span>⚠️ Hay <strong>${sinClasificarTotal}</strong> alumno${sinClasificarTotal===1?'':'s'} sin grupo (A/B/C) asignado — no aparecerán en el informe.</span>
+      <button onclick="document.getElementById('_infDetalleBox').style.display=document.getElementById('_infDetalleBox').style.display==='none'?'block':'none'"
+        style="padding:5px 12px;background:#b85c00;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap">
+        Ver detalle ▾
+      </button>
+    </div>
+    <div id="_infDetalleBox" style="display:none">
+      <div style="background:white;border-radius:8px;padding:10px 14px;max-height:280px;overflow-y:auto">
+        ${sinClasificarDetalle.map(d => `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #f0ece0">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:0.85rem">${escHtml(d.name)} <span style="color:#bbb;font-weight:400">· Grado ${d.grado}</span></div>
+              ${d.posibles.length ? `<div style="font-size:0.75rem;color:#b85c00;margin-top:2px">⚠️ Parece ser la misma persona que: <strong>${d.posibles.map(escHtml).join(', ')}</strong> (ya clasificado) — revisa si el nombre está escrito distinto entre trimestres</div>` : ''}
+            </div>
+            <button onclick="_cycleStudentSeccion('${d.sid}');renderTab()"
+              style="padding:5px 12px;background:var(--ink);color:white;border:none;border-radius:6px;
+                     font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap">
+              Asignar →
+            </button>
+          </div>`).join('')}
+      </div>
+      <p style="font-size:0.75rem;color:#7a5a00;margin-top:8px;line-height:1.5">
+        💡 Si un nombre marcado en naranja ya lo clasificaste antes, es porque está escrito de forma distinta entre trimestres
+        (espacio extra, apodo vs. nombre completo, acento, etc.) y el sistema lo cuenta como una persona diferente.
+        Ve a la pestaña <strong>Calificaciones</strong> del trimestre correspondiente y corrige el nombre para que coincida
+        exactamente — así la clasificación se mantendrá permanentemente y no volverá a pedirte que la repitas.
+      </p>
+    </div>
+  </div>` : ''}
+
+  <div class="inf-panel">
+    <h3>📋 Datos del encabezado oficial</h3>
+    <div class="inf-grid">
+      <div class="inf-field"><label>Instituto</label><input value="${escHtml(cfg.instituto)}" onchange="_infSetConfig('instituto',this.value)"></div>
+      <div class="inf-field"><label>Clave de Centro de Trabajo (CCT)</label><input value="${escHtml(cfg.cct)}" placeholder="Ej. 20FIS0014A" onchange="_infSetConfig('cct',this.value)"></div>
+      <div class="inf-field"><label>Unidad</label><input value="${escHtml(cfg.unidad)}" onchange="_infSetConfig('unidad',this.value)"></div>
+      <div class="inf-field"><label>Tipo de escuelas</label><input value="${escHtml(cfg.tipoEscuelas)}" onchange="_infSetConfig('tipoEscuelas',this.value)"></div>
+      <div class="inf-field"><label>Zona de supervisión</label><input value="${escHtml(cfg.zona)}" placeholder="Ej. ZONA DE SUPERVISIÓN NÚM. 14" onchange="_infSetConfig('zona',this.value)"></div>
+      <div class="inf-field"><label>Ciclo escolar</label><input value="${escHtml(cfg.cicloEscolar)}" placeholder="Ej. 2025 - 2026" onchange="_infSetConfig('cicloEscolar',this.value)"></div>
+      <div class="inf-field"><label>Turno</label><input value="${escHtml(cfg.turno)}" onchange="_infSetConfig('turno',this.value)"></div>
+      <div class="inf-field"><label>Nombre del docente</label><input value="${escHtml(cfg.docente)}" placeholder="Tu nombre completo" onchange="_infSetConfig('docente',this.value)"></div>
+      <div class="inf-field"><label>Escuela</label><input value="${escHtml(cfg.escuela)}" placeholder="Nombre de la escuela" onchange="_infSetConfig('escuela',this.value)"></div>
+    </div>
+  </div>
+
+  <div class="inf-panel">
+    <h3>👁️ Vista previa de datos detectados (${combos.length} grupo${combos.length===1?'':'s'})</h3>
+    ${!combos.length ? `<p style="color:#bbb;text-align:center;padding:20px">No se detectaron grupos clasificados. Asigna secciones A/B/C en Estadísticas primero.</p>` : `
+    <div style="overflow-x:auto">
+      <table class="inf-table">
+        <thead><tr>
+          <th style="text-align:left">Asignatura</th><th>Grado</th><th>Grupo</th><th>Existencia</th>
+          <th>Periodo I</th><th>Periodo II</th><th>Periodo III</th><th>Promedio</th>
+          <th>Aprob.</th><th>Reprob.</th>
+        </tr></thead>
+        <tbody>
+          ${combos.map(c => `<tr>
+            <td>${escHtml(c.asignatura)}</td>
+            <td>${c.grado}</td>
+            <td><strong>${c.seccion}</strong></td>
+            <td>${c.existencia}</td>
+            <td>${c.periodos['1']!==null?c.periodos['1'].toFixed(1):'—'}</td>
+            <td>${c.periodos['2']!==null?c.periodos['2'].toFixed(1):'—'}</td>
+            <td>${c.periodos['3']!==null?c.periodos['3'].toFixed(1):'—'}</td>
+            <td><strong>${c.promedio!==null?c.promedio.toFixed(1):'—'}</strong></td>
+            <td style="color:#155724;font-weight:700">${c.aprobados}</td>
+            <td style="color:#721c24;font-weight:700">${c.reprobados}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>
+
+  <div style="display:flex;justify-content:center;gap:12px;margin:20px 0 8px;flex-wrap:wrap">
+    <button class="inf-print-btn" onclick="_imprimirInformesFinales()" ${!combos.length?'disabled style="opacity:0.4;cursor:not-allowed"':''}>
+      🖨️ Generar e Imprimir Informe (HOJA 1 y HOJA 2)
+    </button>
+    <button class="inf-print-btn" style="background:#1a6640;color:white" onclick="_exportarInformesXLSX()" ${!combos.length?'disabled style="opacity:0.4;cursor:not-allowed"':''}>
+      📊 Descargar Excel (.xlsx)
+    </button>
+  </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+function _imprimirInformesFinales() {
+  const cfg = _infGetConfig();
+  const { combos } = _infRecolectarCombos();
+  if (!combos.length) { showToast('No hay grupos clasificados para generar el informe', 'error'); return; }
+
+  const fmt1 = v => v !== null && v !== undefined ? v.toFixed(1) : '';
+  const fmtPct = v => v !== null && v !== undefined ? v.toFixed(1)+'%' : '';
+
+  const filasHoja1 = combos.map(c => `<tr>
+    <td class="l">${escHtml(c.asignatura)}</td>
+    <td>${c.grado}</td>
+    <td>${c.seccion}</td>
+    <td>${c.existencia}</td>
+    <td>${fmt1(c.periodos['1'])}</td>
+    <td>${fmt1(c.periodos['2'])}</td>
+    <td>${fmt1(c.periodos['3'])}</td>
+    <td class="b">${fmt1(c.promedio)}</td>
+  </tr>`).join('');
+
+  const filasHoja2 = combos.map(c => `<tr>
+    <td class="l">${escHtml(c.asignatura)}</td>
+    <td>${c.grado}</td>
+    <td>${c.seccion}</td>
+    <td>${c.existencia}</td>
+    <td>${c.aprobados}</td>
+    <td>${fmtPct(c.pctAprob)}</td>
+    <td>${c.reprobados}</td>
+    <td>${fmtPct(c.pctReprob)}</td>
+    <td class="b">${fmt1(c.promedio)}</td>
+  </tr>`).join('');
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Informe Estadístico del Docente</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:9.5pt}
+    .hoja{padding:14mm 12mm;page-break-after:always}
+    .hoja:last-child{page-break-after:auto}
+    .top-center{text-align:center;font-size:9.5pt;line-height:1.55;font-weight:700;margin-bottom:6px}
+    .hoja-num{font-size:9pt;font-weight:700;text-align:right;margin-bottom:8px}
+    .titulo-row{display:flex;justify-content:space-between;align-items:center;margin:10px 0 8px;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:5px 0}
+    .titulo{font-size:11pt;font-weight:900}
+    .aspecto{font-size:9pt;font-weight:700}
+    .meta-row{display:flex;gap:24px;margin-bottom:4px;font-size:9pt}
+    .meta-row b{font-weight:700}
+    .meta-line{display:flex;gap:6px;align-items:baseline;margin-bottom:3px}
+    .meta-line .lbl{font-weight:700;white-space:nowrap}
+    .meta-line .val{border-bottom:1px solid #000;flex:1;padding:0 4px;min-height:14px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{border:1px solid #000;padding:4px 6px;text-align:center;font-size:8.8pt}
+    th{background:#e8e8e8;font-weight:700;font-size:7.8pt;text-transform:uppercase}
+    td.l{text-align:left}
+    td.b{font-weight:900}
+    .firmas{display:flex;justify-content:space-between;margin-top:50px;gap:30px}
+    .firma{flex:1;text-align:center}
+    .firma .nombre{font-size:9pt;font-weight:700;border-bottom:1px solid #000;padding-bottom:24px;margin-bottom:4px}
+    .firma .label{font-size:8pt;font-weight:700}
+    .nota{margin-top:16px;font-size:7.5pt;font-style:italic;display:flex;justify-content:space-between}
+    .no-print{position:fixed;top:12px;right:12px;display:flex;gap:8px}
+    @page{margin:10mm;size:letter landscape}
+    @media print{.no-print{display:none}}
+  </style></head><body>
+
+  <div class="no-print">
+    <button onclick="window.print()" style="padding:8px 18px;background:#1a1a2e;color:white;border:none;border-radius:6px;font-size:10pt;cursor:pointer;font-weight:700">🖨️ Imprimir</button>
+  </div>
+
+  <!-- ══════════ HOJA 1 ══════════ -->
+  <div class="hoja">
+    <div class="top-center">
+      ${escHtml(cfg.instituto)}<br>
+      C.T ${escHtml(cfg.cct)}<br>
+      ${escHtml(cfg.unidad)}<br>
+      ${escHtml(cfg.tipoEscuelas)}<br>
+      ${escHtml(cfg.zona)}
+    </div>
+    <div class="hoja-num">HOJA 1</div>
+    <div class="titulo-row">
+      <div class="titulo">INFORME ESTADÍSTICO DEL DOCENTE</div>
+      <div class="aspecto">ASPECTO: CALIFICACIONES PERIÓDICAS Y PROMEDIO</div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-line" style="flex:1"><span class="lbl">CICLO ESCOLAR</span><span class="val">${escHtml(cfg.cicloEscolar)}</span></div>
+      <div class="meta-line" style="flex:0.6"><span class="lbl">TURNO</span><span class="val">${escHtml(cfg.turno)}</span></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-line" style="flex:1"><span class="lbl">NOMBRE DEL DOCENTE</span><span class="val">${escHtml(cfg.docente)}</span></div>
+      <div class="meta-line" style="flex:0.6"><span class="lbl">ESCUELA</span><span class="val">${escHtml(cfg.escuela)}</span></div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th style="text-align:left">ASIGNATURA (S)</th><th>GRADO</th><th>GRUPO</th><th>EXISTENCIA</th>
+        <th>PERÍODO I</th><th>PERÍODO II</th><th>PERÍODO III</th><th>PROMEDIO</th>
+      </tr></thead>
+      <tbody>${filasHoja1}</tbody>
+    </table>
+
+    <div class="firmas">
+      <div class="firma"><div class="nombre">${escHtml(cfg.docente)}</div><div class="label">DOCENTE<br>NOMBRE Y FIRMA</div></div>
+      <div class="firma"><div class="nombre">&nbsp;</div><div class="label">SUBDIRECTOR (A)<br>NOMBRE Y FIRMA</div></div>
+      <div class="firma"><div class="nombre">&nbsp;</div><div class="label">DIRECTOR (A)<br>NOMBRE Y FIRMA</div></div>
+    </div>
+    <div class="nota"><span>NOTA.- UNA HOJA POR TURNO (LAS CALIFICACIONES DE LOS PERÍODOS Y LOS PROMEDIOS SE ASIENTAN CON UN ENTERO Y UN DECIMAL)</span></div>
+  </div>
+
+  <!-- ══════════ HOJA 2 ══════════ -->
+  <div class="hoja">
+    <div class="top-center">
+      ${escHtml(cfg.instituto)}<br>
+      C.T ${escHtml(cfg.cct)}<br>
+      ${escHtml(cfg.unidad)}<br>
+      ${escHtml(cfg.tipoEscuelas)}<br>
+      ${escHtml(cfg.zona)}
+    </div>
+    <div class="hoja-num">HOJA 2</div>
+    <div class="titulo-row">
+      <div class="titulo">INFORME ESTADÍSTICO DEL DOCENTE</div>
+      <div class="aspecto">ASPECTO: PORCENTAJES DE APROBADOS Y REPROBADOS</div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-line" style="flex:1"><span class="lbl">CICLO ESCOLAR</span><span class="val">${escHtml(cfg.cicloEscolar)}</span></div>
+      <div class="meta-line" style="flex:0.6"><span class="lbl">TURNO</span><span class="val">${escHtml(cfg.turno)}</span></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-line" style="flex:1"><span class="lbl">NOMBRE DEL DOCENTE</span><span class="val">${escHtml(cfg.docente)}</span></div>
+      <div class="meta-line" style="flex:0.6"><span class="lbl">ESCUELA</span><span class="val">${escHtml(cfg.escuela)}</span></div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th style="text-align:left">ASIGNATURA (S)</th><th>GDO.</th><th>GPO.</th><th>EXISTENCIA</th>
+        <th>N° APROBADOS</th><th>% APROBADOS</th><th>N° REPROBADOS</th><th>% REPROBADOS</th><th>PROMEDIO</th>
+      </tr></thead>
+      <tbody>${filasHoja2}</tbody>
+    </table>
+
+    <div class="firmas">
+      <div class="firma"><div class="nombre">${escHtml(cfg.docente)}</div><div class="label">DOCENTE<br>NOMBRE Y FIRMA</div></div>
+      <div class="firma"><div class="nombre">&nbsp;</div><div class="label">SUBDIRECTOR (A)<br>NOMBRE Y FIRMA</div></div>
+      <div class="firma"><div class="nombre">&nbsp;</div><div class="label">DIRECTOR (A)<br>NOMBRE Y FIRMA</div></div>
+    </div>
+    <div class="nota"><span>NOTA.- UNA HOJA POR TURNO, EL PROMEDIO SE ANOTA CON UN ENTERO Y UN DECIMAL</span><span>(SIN APROXIMACIONES)</span></div>
+  </div>
+
+  <script>window.onload=()=>{setTimeout(()=>window.print(),300);}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+
+// ── Cargar ExcelJS bajo demanda (solo cuando se necesita exportar) ──────
+let _exceljsCargando = null;
+function _cargarExcelJS() {
+  if (window.ExcelJS) return Promise.resolve();
+  if (_exceljsCargando) return _exceljsCargando;
+  _exceljsCargando = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => { _exceljsCargando = null; reject(new Error('No se pudo cargar la librería Excel')); };
+    document.head.appendChild(s);
+  });
+  return _exceljsCargando;
+}
+
+// ── Exportar a Excel (.xlsx REAL, binario OOXML) ─────────────────────────
+// A diferencia de la versión anterior (HTML disfrazado de .xls, que en
+// algunos equipos Windows se abría por error con Word), este archivo es
+// un .xlsx genuino generado con ExcelJS: Excel, LibreOffice y Google
+// Sheets lo reconocen sin advertencias.
+async function _exportarInformesXLSX() {
+  const cfg = _infGetConfig();
+  const { combos } = _infRecolectarCombos();
+  if (!combos.length) { showToast('No hay grupos clasificados para exportar', 'error'); return; }
+
+  showToast('📊 Generando archivo Excel…', '');
+  try {
+    await _cargarExcelJS();
+  } catch (e) {
+    showToast('⚠️ No se pudo cargar la librería Excel — revisa tu conexión a internet', 'error');
+    return;
+  }
+
+  const fmt1 = v => (v !== null && v !== undefined) ? Number(v.toFixed(1)) : null;
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Registro de Calificaciones';
+  wb.created = new Date();
+
+  const THIN = { style: 'thin' };
+  const BORDER_ALL = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+
+  function construirHoja(nombreHoja, aspecto, headers, filas, colCount, colWidths) {
+    const ws = wb.addWorksheet(nombreHoja, {
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left:0.4,right:0.4,top:0.4,bottom:0.4,header:0,footer:0 } }
+    });
+
+    // ── Encabezado institucional centrado (5 líneas) ──
+    const lineasHeader = [cfg.instituto, 'C.T ' + cfg.cct, cfg.unidad, cfg.tipoEscuelas, cfg.zona];
+    lineasHeader.forEach((texto, i) => {
+      const r = i + 1;
+      ws.mergeCells(r, 1, r, colCount);
+      const cell = ws.getCell(r, 1);
+      cell.value = texto;
+      cell.font = { bold: true, size: 11, name: 'Arial' };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    // HOJA N°
+    const rHoja = 6;
+    ws.mergeCells(rHoja, 1, rHoja, colCount);
+    ws.getCell(rHoja, 1).value = nombreHoja.toUpperCase();
+    ws.getCell(rHoja, 1).alignment = { horizontal: 'right' };
+    ws.getCell(rHoja, 1).font = { bold: true, size: 10, name: 'Arial' };
+
+    // Título + Aspecto
+    const rTitulo = 7;
+    const mitad = Math.ceil(colCount / 2);
+    ws.mergeCells(rTitulo, 1, rTitulo, mitad);
+    ws.getCell(rTitulo, 1).value = 'INFORME ESTADÍSTICO DEL DOCENTE';
+    ws.getCell(rTitulo, 1).font = { bold: true, size: 13, name: 'Arial' };
+    ws.mergeCells(rTitulo, mitad + 1, rTitulo, colCount);
+    ws.getCell(rTitulo, mitad + 1).value = 'ASPECTO: ' + aspecto;
+    ws.getCell(rTitulo, mitad + 1).alignment = { horizontal: 'right' };
+    ws.getCell(rTitulo, mitad + 1).font = { bold: true, size: 10, name: 'Arial' };
+    ws.getRow(rTitulo).border = { top: THIN, bottom: THIN };
+
+    // Ciclo escolar / Turno
+    const rCiclo = 8;
+    ws.mergeCells(rCiclo, 1, rCiclo, mitad);
+    ws.getCell(rCiclo, 1).value = 'CICLO ESCOLAR:  ' + cfg.cicloEscolar;
+    ws.mergeCells(rCiclo, mitad + 1, rCiclo, colCount);
+    ws.getCell(rCiclo, mitad + 1).value = 'TURNO:  ' + cfg.turno;
+    ws.getRow(rCiclo).font = { bold: true, size: 10, name: 'Arial' };
+
+    // Docente / Escuela
+    const rDoc = 9;
+    ws.mergeCells(rDoc, 1, rDoc, mitad);
+    ws.getCell(rDoc, 1).value = 'NOMBRE DEL DOCENTE:  ' + cfg.docente;
+    ws.mergeCells(rDoc, mitad + 1, rDoc, colCount);
+    ws.getCell(rDoc, mitad + 1).value = 'ESCUELA:  ' + cfg.escuela;
+    ws.getRow(rDoc).font = { bold: true, size: 10, name: 'Arial' };
+
+    // Tabla de datos
+    const rHeaders = 11;
+    const headerRow = ws.getRow(rHeaders);
+    headers.forEach((h, i) => { headerRow.getCell(i + 1).value = h; });
+    headerRow.eachCell(c => {
+      c.font = { bold: true, size: 9, name: 'Arial' };
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8E8' } };
+      c.border = BORDER_ALL;
+    });
+
+    filas.forEach((filaVals, i) => {
+      const row = ws.getRow(rHeaders + 1 + i);
+      filaVals.forEach((v, j) => {
+        const cell = row.getCell(j + 1);
+        cell.value = v;
+        cell.border = BORDER_ALL;
+        cell.font = { size: 9, name: 'Arial', bold: (j === filaVals.length - 1) };
+        cell.alignment = { horizontal: j === 0 ? 'left' : 'center', vertical: 'middle' };
+      });
+    });
+
+    // Firmas
+    const rFirma = rHeaders + filas.length + 4;
+    const tercio = Math.floor(colCount / 3);
+    const firmantes = [
+      [1, tercio, cfg.docente, 'DOCENTE\nNOMBRE Y FIRMA'],
+      [tercio + 1, tercio * 2, '', 'SUBDIRECTOR (A)\nNOMBRE Y FIRMA'],
+      [tercio * 2 + 1, colCount, '', 'DIRECTOR (A)\nNOMBRE Y FIRMA'],
+    ];
+    firmantes.forEach(([c1, c2, nombre, label]) => {
+      ws.mergeCells(rFirma, c1, rFirma, c2);
+      const cNombre = ws.getCell(rFirma, c1);
+      cNombre.value = nombre;
+      cNombre.alignment = { horizontal: 'center' };
+      cNombre.border = { bottom: THIN };
+      cNombre.font = { bold: true, size: 9, name: 'Arial' };
+
+      ws.mergeCells(rFirma + 1, c1, rFirma + 1, c2);
+      const cLabel = ws.getCell(rFirma + 1, c1);
+      cLabel.value = label;
+      cLabel.alignment = { horizontal: 'center', wrapText: true };
+      cLabel.font = { bold: true, size: 8, name: 'Arial' };
+    });
+
+    // Nota
+    const rNota = rFirma + 3;
+    ws.mergeCells(rNota, 1, rNota, colCount);
+    const notaTexto = nombreHoja === 'HOJA 1'
+      ? 'NOTA.- UNA HOJA POR TURNO (LAS CALIFICACIONES DE LOS PERÍODOS Y LOS PROMEDIOS SE ASIENTAN CON UN ENTERO Y UN DECIMAL)'
+      : 'NOTA.- UNA HOJA POR TURNO, EL PROMEDIO SE ANOTA CON UN ENTERO Y UN DECIMAL (SIN APROXIMACIONES)';
+    ws.getCell(rNota, 1).value = notaTexto;
+    ws.getCell(rNota, 1).font = { italic: true, size: 8, name: 'Arial' };
+
+    // Anchos de columna
+    colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return ws;
+  }
+
+  // HOJA 1 — Calificaciones periódicas y promedio
+  construirHoja(
+    'HOJA 1', 'CALIFICACIONES PERIÓDICAS Y PROMEDIO',
+    ['ASIGNATURA (S)', 'GRADO', 'GRUPO', 'EXISTENCIA', 'PERÍODO I', 'PERÍODO II', 'PERÍODO III', 'PROMEDIO'],
+    combos.map(c => [c.asignatura, c.grado, c.seccion, c.existencia, fmt1(c.periodos['1']), fmt1(c.periodos['2']), fmt1(c.periodos['3']), fmt1(c.promedio)]),
+    8, [22, 8, 8, 11, 11, 11, 11, 11]
+  );
+
+  // HOJA 2 — Porcentajes de aprobados y reprobados
+  construirHoja(
+    'HOJA 2', 'PORCENTAJES DE APROBADOS Y REPROBADOS',
+    ['ASIGNATURA (S)', 'GDO.', 'GPO.', 'EXISTENCIA', 'N° APROBADOS', '% APROBADOS', 'N° REPROBADOS', '% REPROBADOS', 'PROMEDIO'],
+    combos.map(c => [c.asignatura, c.grado, c.seccion, c.existencia, c.aprobados, (c.pctAprob/100), c.reprobados, (c.pctReprob/100), fmt1(c.promedio)]),
+    9, [22, 7, 7, 11, 13, 12, 13, 12, 11]
+  );
+
+  // Formatear columnas de porcentaje en HOJA 2 con formato % nativo de Excel
+  const ws2 = wb.getWorksheet('HOJA 2');
+  for (let r = 12; r <= 11 + combos.length; r++) {
+    ws2.getCell(r, 6).numFmt = '0.0%';
+    ws2.getCell(r, 8).numFmt = '0.0%';
+  }
+
+  try {
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cicloSafe = (cfg.cicloEscolar || 'ciclo').replace(/[^\w-]/g, '_');
+    a.download = `Informe_IEEPO_${cicloSafe}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('📊 Excel (.xlsx) descargado correctamente', 'success');
+  } catch (e) {
+    console.error('[Informes] Error al generar xlsx:', e);
+    showToast('⚠️ Error al generar el archivo Excel: ' + e.message, 'error');
+  }
+}
 
 function renderSettingsTab(container) {
   container.innerHTML = `
