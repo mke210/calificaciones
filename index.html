@@ -1428,10 +1428,10 @@ function saveAll() {
   const fbOk = (typeof fbGuardar === 'function') && fbGuardar();
 
   if (!fbOk) {
-    showToast('💾 Guardado localmente', 'success');
+    showToast('💾 Guardado correctamente', 'success');
     _markDirty(); // sin nube todavía
   } else {
-    showToast('💾 Guardado · ☁️ Subiendo a Firebase…', 'success');
+    showToast('💾 Guardado · ☁️ Sincronizado con Firebase', 'success');
     setTimeout(_markClean, 2000); // asumir éxito tras 2s
   }
 }
@@ -7769,13 +7769,19 @@ function fbSaveConfig(cfg) {
 
 // ── Cargar SDK de Firebase (lazy) ─────────────────────────────────────────
 function _fbCargarSDK(cb) {
-  if (window.firebase) { cb(); return; }
+  if (window.firebase && window.firebase.auth) { cb(); return; }
   const s = document.createElement('script');
   s.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js';
   s.onload = () => {
     const s2 = document.createElement('script');
     s2.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js';
-    s2.onload = cb;
+    s2.onload = () => {
+      const s3 = document.createElement('script');
+      s3.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js';
+      s3.onload = cb;
+      s3.onerror = () => fbSetStatus('error', 'No se pudo cargar Firebase Auth SDK');
+      document.head.appendChild(s3);
+    };
     s2.onerror = () => fbSetStatus('error', 'No se pudo cargar Firebase SDK');
     document.head.appendChild(s2);
   };
@@ -7798,46 +7804,95 @@ function fbInit() {
       // Destruir app previa si existe
       if (FB.app) { try { FB.app.delete(); } catch(e){} }
       FB.app = firebase.initializeApp(FB.config, 'calificaciones_' + Date.now());
-      FB.db  = firebase.database(FB.app);
-      FB.ref = FB.db.ref(FB_DATA_PATH);
-      FB.metaRef = FB.db.ref(FB_META_PATH);
 
-      // Detectar conectividad
-      FB.db.ref('.info/connected').on('value', snap => {
-        const online = snap.val() === true;
-        if (online && FB.status !== 'connected') {
-          fbSetStatus('connected', 'Conectado a Firebase');
-          fbRefreshUI();
-          // Al reconectar: traer datos más recientes de la nube
-          fbCargarDesdeNube(false);
-        } else if (!online && FB.status === 'connected') {
-          fbSetStatus('loading', 'Reconectando…');
+      // ── Autenticación anónima ──────────────────────────────────────────
+      // Inicia sesión sola, en segundo plano, sin pedir usuario ni contraseña.
+      // Esto permite usar reglas ".read/.write": "auth != null" en Firebase,
+      // que bloquean a cualquiera fuera de esta app pero son transparentes
+      // para el docente (no hay login que recordar, es automático).
+      //
+      // IMPORTANTE: esperamos a onAuthStateChanged (no solo a que la promesa
+      // de signInAnonymously se resuelva) porque es la señal confiable de que
+      // el token ya está listo para usarse en las peticiones de Database.
+      // Conectar la base de datos justo después de la promesa, sin esperar
+      // este evento, puede causar un PERMISSION_DENIED intermitente por una
+      // condición de carrera interna del SDK.
+      const auth = firebase.auth(FB.app);
+      FB.auth = auth;
+      let _yaConectadoDB = false;
+
+      auth.onAuthStateChanged(user => {
+        if (user && !_yaConectadoDB) {
+          _yaConectadoDB = true;
+          FB.authUid = user.uid;
+          FB.lastAuthError = null;
+          console.info('[Firebase] Autenticado anónimamente, uid:', user.uid);
+          _fbConectarBaseDatos();
           fbRefreshUI();
         }
       });
 
-      // Listener en tiempo real: cuando OTRO dispositivo guarda, actualiza aquí
-      // SOLO aplica si el dato remoto es de OTRO dispositivo Y es más reciente que lo local
-      if (FB.listener) { try { FB.ref.off('value', FB.listener); } catch(e){} }
-      FB.listener = FB.ref.on('value', snap => {
-        const remote = snap.val();
-        if (!remote) return;
-        // Ignorar cambios que vinieron de este mismo dispositivo
-        if (remote._savedBy && remote._savedBy === FB.deviceId) return;
-        // Solo aplicar si el remoto es más reciente que lo local
-        const localTs  = data._savedAt  || 0;
-        const remoteTs = remote._savedAt || 0;
-        if (remoteTs <= localTs) return;  // ← local es igual o más reciente, no tocar
-        _fbAplicarRemoto(remote);
+      auth.signInAnonymously().catch(e => {
+        console.error('[Firebase] Fallo al iniciar sesión anónima:', e.code, e.message);
+        FB.lastAuthError = { code: e.code, message: e.message };
+        if (!_yaConectadoDB) {
+          _yaConectadoDB = true;
+          FB.authUid = null;
+          showToast('⚠️ Auth anónima falló (' + e.code + '): ' + e.message, 'error');
+          // Continuar de todos modos, por si las reglas del proyecto son abiertas (true/true)
+          _fbConectarBaseDatos();
+        }
+        fbRefreshUI();
       });
-
-      fbSetStatus('connected', 'Conectado');
-      fbRefreshUI();
     } catch(e) {
       fbSetStatus('error', 'Error al inicializar: ' + e.message);
       fbRefreshUI();
     }
   });
+}
+
+// ── Conectar a la Realtime Database (después de autenticar) ───────────────
+function _fbConectarBaseDatos() {
+  try {
+    FB.db  = firebase.database(FB.app);
+    FB.ref = FB.db.ref(FB_DATA_PATH);
+    FB.metaRef = FB.db.ref(FB_META_PATH);
+
+    // Detectar conectividad
+    FB.db.ref('.info/connected').on('value', snap => {
+      const online = snap.val() === true;
+      if (online && FB.status !== 'connected') {
+        fbSetStatus('connected', 'Conectado a Firebase');
+        fbRefreshUI();
+        // Al reconectar: traer datos más recientes de la nube
+        fbCargarDesdeNube(false);
+      } else if (!online && FB.status === 'connected') {
+        fbSetStatus('loading', 'Reconectando…');
+        fbRefreshUI();
+      }
+    });
+
+    // Listener en tiempo real: cuando OTRO dispositivo guarda, actualiza aquí
+    // SOLO aplica si el dato remoto es de OTRO dispositivo Y es más reciente que lo local
+    if (FB.listener) { try { FB.ref.off('value', FB.listener); } catch(e){} }
+    FB.listener = FB.ref.on('value', snap => {
+      const remote = snap.val();
+      if (!remote) return;
+      // Ignorar cambios que vinieron de este mismo dispositivo
+      if (remote._savedBy && remote._savedBy === FB.deviceId) return;
+      // Solo aplicar si el remoto es más reciente que lo local
+      const localTs  = data._savedAt  || 0;
+      const remoteTs = remote._savedAt || 0;
+      if (remoteTs <= localTs) return;  // ← local es igual o más reciente, no tocar
+      _fbAplicarRemoto(remote);
+    });
+
+    fbSetStatus('connected', 'Conectado');
+    fbRefreshUI();
+  } catch(e) {
+    fbSetStatus('error', 'Error al conectar: ' + e.message);
+    fbRefreshUI();
+  }
 }
 
 // ── Guardar TODO en Firebase (llamado desde saveAll) ──────────────────────
@@ -7917,11 +7972,8 @@ function fbGuardar() {
       _markClean(); // Firebase confirmó — todo está guardado
       fbRefreshUI();
     }).catch(e => {
-      if (String(e.message).includes('PERMISSION_DENIED')) {
-        _mostrarAyudaPermisosFirebase();
-      } else {
-        showToast('⚠️ Firebase: ' + e.message + ' — datos guardados localmente', 'error');
-      }
+      const uid = (FB.auth && FB.auth.currentUser) ? FB.auth.currentUser.uid.slice(0,6)+'…' : 'sin sesión';
+      showToast('⚠️ Firebase (auth: ' + uid + '): ' + e.message + ' — datos guardados localmente', 'error');
       _markDirty();
     });
     return true;
@@ -8126,6 +8178,29 @@ function fbRefreshUI() {
         ☁️ Traer ahora
       </button>
     </div>
+
+    <!-- Diagnóstico de autenticación (persistente, no desaparece como un toast) -->
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border-radius:10px;
+                background:${FB.authUid ? '#e8f8ee' : '#fff3e0'};border:1.5px solid ${FB.authUid ? '#a0ddb0' : '#f0c060'}">
+      <span style="font-size:1.2rem">${FB.authUid ? '🔑' : '⚠️'}</span>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:0.85rem;color:${FB.authUid ? '#155724' : '#7a5a00'}">
+          ${FB.authUid ? 'Sesión anónima activa' : 'Sin sesión de autenticación'}
+        </div>
+        <div style="font-size:0.72rem;color:#555;margin-top:1px">
+          ${FB.authUid
+            ? 'UID: ' + FB.authUid.slice(0,10) + '…'
+            : (FB.lastAuthError ? `Código: ${FB.lastAuthError.code} — ${FB.lastAuthError.message}` : 'Aún no se ha intentado iniciar sesión')}
+        </div>
+      </div>
+    </div>
+    ${!FB.authUid && FB.lastAuthError ? `
+    <div style="padding:10px 14px;margin-bottom:14px;border-radius:10px;background:#fdf2f2;border:1.5px solid #f5c6c6;font-size:0.78rem;color:#7a2020;line-height:1.5">
+      💡 Si el código dice <strong>auth/api-key-not-valid</strong> o similar, revisa que la clave (apiKey) de tu configuración
+      coincida exactamente con la de tu proyecto en Firebase Console → ⚙️ Configuración del proyecto.<br>
+      Si el código dice <strong>auth/operation-not-allowed</strong>, verifica que "Anonymous" esté habilitado en
+      Authentication → Método de acceso (puede tardar 1-2 minutos en propagarse después de activarlo).
+    </div>` : ''}
 
     <!-- Log -->
     <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:6px">
