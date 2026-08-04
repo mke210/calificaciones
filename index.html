@@ -1183,6 +1183,9 @@ let data = { groups: [] };
 const IA_CONFIG_KEY = 'regCalif_ia_config_v1';
 const IA_POS_KEY = 'regCalif_ia_pos_v1';
 let IA = { apiKey:'', model:'gemini-3.5-flash', enabled:false, voice:true };
+// Modelos que Google ya retiró — si un usuario los tiene guardados de una
+// configuración anterior, se corrigen solos al abrir la app.
+const IA_RETIRED_MODELS = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-8b','gemini-1.5-pro','gemini-pro'];
 
 // ════════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN — credenciales fragmentadas en base64
@@ -8355,10 +8358,6 @@ function fbRefreshUI() {
 // ════════════════════════════════════════════════════════════════════════════
 // 🤖 ASISTENTE DE IA FLOTANTE (Google Gemini — capa gratuita)
 // ════════════════════════════════════════════════════════════════════════════
-
-// Modelos que Google ya retiró — si un usuario los tiene guardados de una
-// configuración anterior, se corrigen solos al abrir la app.
-const IA_RETIRED_MODELS = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-8b','gemini-1.5-pro','gemini-pro'];
 
 function iaLoadConfig(){
   try{
