@@ -1178,6 +1178,12 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 <script>
 let data = { groups: [] };
 
+// Config del Asistente de IA — declarada aquí arriba para evitar errores de
+// "acceso antes de inicialización" cuando iaInit() se llama al arrancar la app.
+const IA_CONFIG_KEY = 'regCalif_ia_config_v1';
+const IA_POS_KEY = 'regCalif_ia_pos_v1';
+let IA = { apiKey:'', model:'gemini-2.0-flash', enabled:false, voice:true };
+
 // ════════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN — credenciales fragmentadas en base64
 // ════════════════════════════════════════════════════════════════════
@@ -8349,9 +8355,6 @@ function fbRefreshUI() {
 // ════════════════════════════════════════════════════════════════════════════
 // 🤖 ASISTENTE DE IA FLOTANTE (Google Gemini — capa gratuita)
 // ════════════════════════════════════════════════════════════════════════════
-const IA_CONFIG_KEY = 'regCalif_ia_config_v1';
-const IA_POS_KEY = 'regCalif_ia_pos_v1';
-let IA = { apiKey:'', model:'gemini-2.0-flash', enabled:false, voice:true };
 
 function iaLoadConfig(){
   try{
