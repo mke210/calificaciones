@@ -1024,7 +1024,7 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
     <div class="ia-head" id="iaHead" onmousedown="iaStartDrag(event)" ontouchstart="iaStartDrag(event)">
       <div style="flex:1;min-width:0">
         <div class="ia-title">🤖 Asistente IA</div>
-        <div class="ia-sub" id="iaModelLabel">Gemini</div>
+        <div class="ia-sub" id="iaModelLabel">GPT-4o mini</div>
       </div>
       <button onclick="iaToggleVoice()" id="iaVoiceBtn" title="Activar/desactivar voz">🔊</button>
       <button onclick="iaMinimize()" title="Minimizar">—</button>
@@ -1182,10 +1182,10 @@ let data = { groups: [] };
 // "acceso antes de inicialización" cuando iaInit() se llama al arrancar la app.
 const IA_CONFIG_KEY = 'regCalif_ia_config_v1';
 const IA_POS_KEY = 'regCalif_ia_pos_v1';
-let IA = { apiKey:'', model:'gemini-3.5-flash', enabled:false, voice:true };
-// Modelos que Google ya retiró — si un usuario los tiene guardados de una
-// configuración anterior, se corrigen solos al abrir la app.
-const IA_RETIRED_MODELS = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-8b','gemini-1.5-pro','gemini-pro'];
+let IA = { apiKey:'', model:'openai/gpt-4o-mini', enabled:false, voice:true };
+// Modelos/proveedores que ya no se usan — si un usuario los tiene guardados de una
+// configuración anterior (Google Gemini), se limpian solos al abrir la app.
+const IA_RETIRED_MODELS = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-8b','gemini-1.5-pro','gemini-pro','gemini-3.5-flash','gemini-2.5-flash','gemini-3.1-flash-lite','gemini-2.5-flash-lite'];
 
 // ════════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN — credenciales fragmentadas en base64
@@ -4974,7 +4974,7 @@ function renderSettingsTab(container) {
             Asistente de IA (gratuito)
           </div>
           <div style="font-size:0.72rem;color:rgba(255,255,255,0.65);margin-top:2px">
-            Pregúntale por voz o texto sobre tus grupos — funciona con Google Gemini, sin costo
+            Pregúntale por voz o texto sobre tus grupos — usa modelos de OpenAI, gratis vía GitHub
           </div>
         </div>
       </div>
@@ -8356,7 +8356,7 @@ function fbRefreshUI() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 🤖 ASISTENTE DE IA FLOTANTE (Google Gemini — capa gratuita)
+// 🤖 ASISTENTE DE IA FLOTANTE (GitHub Models — modelos de OpenAI gratis)
 // ════════════════════════════════════════════════════════════════════════════
 
 function iaLoadConfig(){
@@ -8364,8 +8364,15 @@ function iaLoadConfig(){
     const saved = JSON.parse(localStorage.getItem(IA_CONFIG_KEY) || 'null');
     if(saved) IA = Object.assign(IA, saved);
   }catch(e){}
-  if(IA_RETIRED_MODELS.includes(IA.model)){
-    IA.model = 'gemini-3.5-flash';
+  // Se cambió de proveedor (Google Gemini → GitHub Models / OpenAI).
+  // Las claves y modelos antiguos no sirven aquí, se limpian para evitar
+  // errores confusos de autenticación con el proveedor equivocado.
+  const esModeloViejo = IA_RETIRED_MODELS.includes(IA.model) || (IA.model||'').indexOf('gemini') === 0;
+  const esClaveGemini = (IA.apiKey||'').indexOf('AIza') === 0;
+  if(esModeloViejo || esClaveGemini){
+    IA.model = 'openai/gpt-4o-mini';
+    IA.apiKey = '';
+    IA.enabled = false;
     iaSaveConfig();
   }
 }
@@ -8424,15 +8431,15 @@ function iaSettingsHTML(){
       </label>
     </div>
 
-    <div class="form-row"><label>Clave API gratuita (Google Gemini)</label>
-      <input type="password" id="iaApiKeyInput" value="${escHtml(IA.apiKey)}" placeholder="Pega aquí tu clave de aistudio.google.com">
+    <div class="form-row"><label>Token de GitHub gratuito (acceso a modelos de OpenAI)</label>
+      <input type="password" id="iaApiKeyInput" value="${escHtml(IA.apiKey)}" placeholder="Pega aquí tu token de github.com (empieza con github_pat_...)">
     </div>
     <div class="form-row"><label>Modelo</label>
       <select id="iaModelSelect">
-        <option value="gemini-3.5-flash" ${IA.model==='gemini-3.5-flash'?'selected':''}>Gemini 3.5 Flash (recomendado)</option>
-        <option value="gemini-2.5-flash" ${IA.model==='gemini-2.5-flash'?'selected':''}>Gemini 2.5 Flash</option>
-        <option value="gemini-3.1-flash-lite" ${IA.model==='gemini-3.1-flash-lite'?'selected':''}>Gemini 3.1 Flash-Lite (más ligero)</option>
-        <option value="gemini-2.5-flash-lite" ${IA.model==='gemini-2.5-flash-lite'?'selected':''}>Gemini 2.5 Flash-Lite</option>
+        <option value="openai/gpt-4o-mini" ${IA.model==='openai/gpt-4o-mini'?'selected':''}>GPT-4o mini (recomendado — rápido y ligero)</option>
+        <option value="openai/gpt-4o" ${IA.model==='openai/gpt-4o'?'selected':''}>GPT-4o (más capaz)</option>
+        <option value="openai/gpt-4.1" ${IA.model==='openai/gpt-4.1'?'selected':''}>GPT-4.1</option>
+        <option value="openai/gpt-4.1-mini" ${IA.model==='openai/gpt-4.1-mini'?'selected':''}>GPT-4.1 mini</option>
       </select>
     </div>
 
@@ -8451,16 +8458,16 @@ function iaSettingsHTML(){
       💾 Guardar
     </button>
     <span style="margin-left:10px;font-size:.78rem;color:${hasKey?'var(--green)':'#c88'}">
-      ${hasKey?'✅ Clave guardada':'⚠️ Falta pegar tu clave API'}
+      ${hasKey?'✅ Token guardado':'⚠️ Falta pegar tu token de GitHub'}
     </span>
 
     <div style="margin-top:16px;padding:12px 14px;background:#fff8f0;border:1.5px solid var(--conduct-border);border-radius:8px;font-size:.78rem;color:#666;line-height:1.7">
-      <strong>¿Cómo obtener tu clave gratis? (2 minutos)</strong><br>
-      1. Entra a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a><br>
-      2. Inicia sesión con tu cuenta de Google.<br>
-      3. Haz clic en <em>"Create API key"</em> (Crear clave de API).<br>
-      4. Copia la clave y pégala arriba, en "Clave API gratuita".<br>
-      5. Presiona <strong>💾 Guardar</strong> y activa el interruptor "Asistente flotante".<br>
+      <strong>¿Cómo obtener tu token gratis? (2 minutos)</strong><br>
+      1. Entra a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a> (inicia sesión o crea una cuenta gratis de GitHub).<br>
+      2. Ponle un nombre, por ejemplo "Asistente Registro".<br>
+      3. Baja hasta <em>"Permissions" → "Account permissions"</em>, busca <strong>"Models"</strong> y ponlo en <strong>"Read-only"</strong>.<br>
+      4. Haz clic en <em>"Generate token"</em> y copia el token que empieza con <code>github_pat_...</code><br>
+      5. Pégalo arriba, en "Token de GitHub gratuito", y presiona <strong>💾 Guardar</strong>.<br>
       6. El ícono 🤖 aparecerá flotando — puedes arrastrarlo a donde quieras.
     </div>
   `;
@@ -8583,7 +8590,7 @@ function iaAppendMsg(role, text){
 async function iaSend(){
   if(!IA.enabled){ return; }
   if(!IA.apiKey){
-    iaAppendMsg('bot', '⚠️ Primero configura tu clave API gratuita en ⚙️ Ajustes → 🤖 Asistente de IA.');
+    iaAppendMsg('bot', '⚠️ Primero configura tu token gratuito de GitHub en ⚙️ Ajustes → 🤖 Asistente de IA.');
     return;
   }
   const input = document.getElementById('iaInput');
@@ -8601,30 +8608,40 @@ async function iaSend(){
     + 'Datos actuales:\n' + context;
 
   try{
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(IA.model)
-      + ':generateContent?key=' + encodeURIComponent(IA.apiKey);
+    const url = 'https://models.github.ai/inference/chat/completions';
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + IA.apiKey,
+        'Accept': 'application/vnd.github+json'
+      },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: question }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
+        model: IA.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: question }
+        ],
+        temperature: 0.3,
+        max_tokens: 500
       })
     });
     const json = await resp.json();
     if(thinkingEl) thinkingEl.remove();
     if(!resp.ok){
-      const msg = (json.error && json.error.message) || ('Error ' + resp.status);
-      const isModelError = resp.status === 404 || /not found|not supported/i.test(msg);
-      iaAppendMsg('bot', isModelError
-        ? '❌ Este modelo ya no está disponible (Google los cambia seguido). Ve a ⚙️ Ajustes → 🤖 Asistente de IA y elige otro modelo de la lista, luego Guardar.'
-        : '❌ ' + msg);
+      const msg = (json.error && json.error.message) || json.message || ('Error ' + resp.status);
+      const isAuthError = resp.status === 401 || resp.status === 403 || /token|unauthor|permission/i.test(msg);
+      const isModelError = resp.status === 404 || /not found|not supported|unknown model/i.test(msg);
+      iaAppendMsg('bot', isAuthError
+        ? '❌ Tu token de GitHub no es válido o no tiene permiso "Models: Read-only". Revisa ⚙️ Ajustes → 🤖 Asistente de IA.'
+        : isModelError
+          ? '❌ Este modelo ya no está disponible. Ve a ⚙️ Ajustes → 🤖 Asistente de IA y elige otro modelo de la lista, luego Guardar.'
+          : '❌ ' + msg);
       return;
     }
-    const cand = json.candidates && json.candidates[0];
-    const text = (cand && cand.content && cand.content.parts)
-      ? cand.content.parts.map(p=>p.text||'').join('').trim()
+    const choice = json.choices && json.choices[0];
+    const text = (choice && choice.message && choice.message.content)
+      ? String(choice.message.content).trim()
       : 'No obtuve una respuesta. Intenta reformular tu pregunta.';
     iaAppendMsg('bot', text || '(respuesta vacía)');
     if(IA.voice) iaSpeak(text);
