@@ -2357,6 +2357,117 @@ function _trimLabel(t) {
   return 'Trimestre ' + t;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   FIN DE CICLO ESCOLAR
+   Cada "grupo" (ej. 1°A) existe como hasta 3 objetos separados en
+   data.groups — uno por trimestre, con el mismo g.name. Estas funciones
+   operan sobre TODAS las instancias (los 3 trimestres) de cada grupo.
+═══════════════════════════════════════════════════════════════════════ */
+const GRADO_PALABRA = { '1':'Primero', '2':'Segundo', '3':'Tercero', '4':'Cuarto', '5':'Quinto', '6':'Sexto' };
+
+// Nombres únicos de grupo (ej. "1°A", "1°B") que pertenecen a un grado dado
+function _nombresGrupoPorGrado(grado) {
+  const nombres = new Set();
+  data.groups.forEach(g => { if (_gradoFromGroup(g) === grado) nombres.add(g.name); });
+  return Array.from(nombres);
+}
+
+// Intenta renombrar "1°A" -> "2°A", "Primero A" -> "Segundo A", etc.
+// Si no reconoce el patrón, deja el nombre igual (el grado real lo sigue
+// controlando g.grado, que siempre se actualiza).
+function _renombrarGrupoGrado(nombre, origen, destino) {
+  const reDigito = new RegExp('(^|\\s)' + origen + '([°º]?)(?=\\s|$|[A-Za-z])');
+  if (reDigito.test(nombre)) return { nuevo: nombre.replace(reDigito, '$1' + destino + '$2'), reconocido: true };
+  const pOrigen = GRADO_PALABRA[origen];
+  if (pOrigen) {
+    const reWord = new RegExp(pOrigen, 'i');
+    if (reWord.test(nombre)) return { nuevo: nombre.replace(reWord, GRADO_PALABRA[destino]), reconocido: true };
+  }
+  return { nuevo: nombre, reconocido: false };
+}
+
+// Borra del objeto data.asistencia todos los registros de un grupo (por su id)
+function _limpiarAsistenciaDeGrupo(gid) {
+  if (!data.asistencia) return;
+  Object.keys(data.asistencia).forEach(key => {
+    if (key.indexOf(gid + '_') === 0) delete data.asistencia[key];
+  });
+}
+
+// Vista previa (sin modificar nada) de lo que haría cada operación —
+// se usa para mostrarle al maestro exactamente qué va a pasar antes de confirmar.
+function _previewEgresar(grado) {
+  const nombres = _nombresGrupoPorGrado(grado);
+  const totalAlumnos = data.groups
+    .filter(g => nombres.includes(g.name) && _gradoFromGroup(g) === grado)
+    .reduce((sum, g) => sum + (g.students ? g.students.length : 0), 0) / (nombres.length ? 1 : 1);
+  // Contar alumnos únicos por nombre de grupo (evitar contar 3 veces, uno por trimestre)
+  const alumnosUnicos = new Set();
+  data.groups.forEach(g => {
+    if (nombres.includes(g.name) && _gradoFromGroup(g) === grado) {
+      (g.students || []).forEach(s => alumnosUnicos.add(g.name + '|' + s.name));
+    }
+  });
+  return { grupos: nombres, totalAlumnos: alumnosUnicos.size };
+}
+function _previewPromover(origen, destino) {
+  const nombres = _nombresGrupoPorGrado(origen);
+  const alumnosUnicos = new Set();
+  const renombres = [];
+  nombres.forEach(nombre => {
+    const { nuevo, reconocido } = _renombrarGrupoGrado(nombre, origen, destino);
+    renombres.push({ de: nombre, a: nuevo, reconocido });
+  });
+  data.groups.forEach(g => {
+    if (nombres.includes(g.name) && _gradoFromGroup(g) === origen) {
+      (g.students || []).forEach(s => alumnosUnicos.add(g.name + '|' + s.name));
+    }
+  });
+  return { grupos: nombres, totalAlumnos: alumnosUnicos.size, renombres };
+}
+
+// Elimina POR COMPLETO todo registro (los 3 trimestres) de los grupos de un grado.
+// Se usa para egresar el grado 3 al terminar el ciclo escolar.
+function _eliminarGradoCompleto(grado) {
+  const nombres = _nombresGrupoPorGrado(grado);
+  if (!nombres.length) return 0;
+  data.groups.forEach(g => {
+    if (nombres.includes(g.name) && _gradoFromGroup(g) === grado) _limpiarAsistenciaDeGrupo(g.id);
+  });
+  data.groups = data.groups.filter(g => !(nombres.includes(g.name) && _gradoFromGroup(g) === grado));
+  return nombres.length;
+}
+
+// Promueve todos los grupos de `origen` a `destino`: conserva a los alumnos
+// (nombre, id y código/QR) pero borra TODO su historial académico de los
+// 3 trimestres — calificaciones, actividades, tareas, conducta, promedios
+// y asistencia — para empezar limpio el nuevo ciclo en el grado siguiente.
+function _promoverGrado(origen, destino) {
+  const nombres = _nombresGrupoPorGrado(origen);
+  if (!nombres.length) return { total: 0, renombres: [] };
+  const renombres = [];
+  const yaRenombrado = {};
+  data.groups.forEach(g => {
+    if (nombres.includes(g.name) && _gradoFromGroup(g) === origen) {
+      _limpiarAsistenciaDeGrupo(g.id);
+      if (!yaRenombrado[g.name]) {
+        const r = _renombrarGrupoGrado(g.name, origen, destino);
+        yaRenombrado[g.name] = r.nuevo;
+        renombres.push({ de: g.name, a: r.nuevo, reconocido: r.reconocido });
+      }
+      g.name = yaRenombrado[g.name];
+      g.grado = destino;
+      g.activities = [];
+      g.grades = {};
+      g.conduct = {};
+      g.hwStatus = {};
+      g.manualAvg = {};
+      // g.students se conserva tal cual: nombre, id y código/QR de cada alumno
+    }
+  });
+  return { total: nombres.length, renombres };
+}
+
 function _estChange(field, val) {
   _estState[field] = val;
   if (field === 'grado') { _estState.seccion = null; _estState.trimestre = null; }
@@ -5041,14 +5152,12 @@ function renderSettingsTab(container) {
 
     <!-- ══ 3. ZONA DE PELIGRO ════════════════════════════════════════════ -->
     <div class="danger-zone">
-      <h3>⚠️ Zona de Peligro</h3>
-      <div class="danger-row"><div><strong>Borrar todas las calificaciones</strong><div class="danger-desc">Mantiene alumnos y actividades.</div></div><button class="btn btn-danger" onclick="clearGradesConfirm()">Borrar Calificaciones</button></div>
-      <div class="danger-row"><div><strong>Borrar todos los registros de conducta</strong><div class="danger-desc">Elimina conductas e incidentes.</div></div><button class="btn btn-danger" onclick="clearConductConfirm()">Borrar Conducta</button></div>
-      <div class="danger-row"><div><strong>Borrar todos los estados de tareas</strong><div class="danger-desc">Elimina entregados, pendientes y notas.</div></div><button class="btn btn-danger" onclick="clearHWConfirm()">Borrar Tareas</button></div>
-      <div class="danger-row"><div><strong>Borrar todas las actividades</strong><div class="danger-desc">Elimina actividades, calificaciones y tareas.</div></div><button class="btn btn-danger" onclick="clearActivitiesConfirm()">Borrar Actividades</button></div>
-      <div class="danger-row"><div><strong>Borrar todos los alumnos</strong><div class="danger-desc">Elimina alumnos y todos sus datos.</div></div><button class="btn btn-danger" onclick="clearStudentsConfirm()">Borrar Alumnos</button></div>
-      <div class="danger-row"><div><strong>Reiniciar grupo completo</strong><div class="danger-desc">Borra absolutamente todo del grupo.</div></div><button class="btn btn-danger" onclick="clearGroupConfirm()">Reiniciar Grupo</button></div>
-      <div class="danger-row" style="border-top:2px dashed #ffcccc;margin-top:8px;padding-top:16px"><div><strong>Restablecer datos de ejemplo</strong><div class="danger-desc">Borra todo y recarga los 6 grupos de ejemplo.</div></div><button class="btn btn-danger" onclick="resetSampleData()">Restablecer Ejemplo</button></div>
+      <h3>⚠️ Zona de Peligro — Fin de Ciclo Escolar</h3>
+      <p style="font-size:0.8rem;color:#888;margin:-4px 0 14px">Al terminar el ciclo: los alumnos de 3° egresan (se elimina todo su registro); los de 1° y 2° pasan al siguiente grado conservando su nombre pero con el historial académico limpio.</p>
+      <div class="danger-row"><div><strong>🎓 Egresar alumnos de 3°</strong><div class="danger-desc">Elimina POR COMPLETO su registro (1°, 2° y 3° trimestre): calificaciones, trabajos, tareas, promedios, promedios finales, conducta y estadísticas.</div></div><button class="btn btn-danger" onclick="_mostrarFinCiclo('egresar3')">Egresar 3°</button></div>
+      <div class="danger-row"><div><strong>⬆️ Promover 2° → 3°</strong><div class="danger-desc">Conserva nombre e ID de cada alumno. Elimina su historial académico de los 3 trimestres para iniciar limpio en 3°.</div></div><button class="btn btn-danger" onclick="_mostrarFinCiclo('promover23')">Promover 2° a 3°</button></div>
+      <div class="danger-row"><div><strong>⬆️ Promover 1° → 2°</strong><div class="danger-desc">Conserva nombre e ID de cada alumno. Elimina su historial académico de los 3 trimestres para iniciar limpio en 2°.</div></div><button class="btn btn-danger" onclick="_mostrarFinCiclo('promover12')">Promover 1° a 2°</button></div>
+      <div class="danger-row" style="border-top:2px dashed #ffcccc;margin-top:8px;padding-top:16px"><div><strong>🎉 Cerrar Ciclo Escolar completo</strong><div class="danger-desc">Hace las 3 operaciones de una sola vez, en el orden correcto: egresa 3°, promueve 2°→3°, promueve 1°→2°.</div></div><button class="btn btn-danger" onclick="_mostrarFinCiclo('completo')">Cerrar Ciclo</button></div>
     </div>
 
   </div>`;
@@ -5149,6 +5258,92 @@ function clearHWConfirm()        { pendingConfirm=()=>{const g=currentGroup();g.
 function clearActivitiesConfirm(){ pendingConfirm=()=>{const g=currentGroup();g.activities=[];g.grades={};g.hwStatus={};autoSave();renderMain();showToast('Actividades eliminadas','success');}; showConfirm('Borrar Actividades','¿Eliminar todas las actividades, calificaciones y tareas?'); }
 function clearStudentsConfirm()  { pendingConfirm=()=>{const g=currentGroup();g.students=[];g.grades={};g.conduct={};g.hwStatus={};autoSave();renderMain();showToast('Alumnos eliminados','success');}; showConfirm('Borrar Alumnos','¿Eliminar todos los alumnos y sus datos?'); }
 function clearGroupConfirm()     { pendingConfirm=()=>{const g=currentGroup();g.students=[];g.activities=[];g.grades={};g.conduct={};g.hwStatus={};autoSave();renderMain();showToast('Grupo reiniciado','success');}; showConfirm('Reiniciar Grupo','¿Reiniciar completamente este grupo?'); }
+
+/* ── Fin de Ciclo Escolar: modal de vista previa + ejecución ── */
+function _finCicloRenglon(txt, ok) {
+  return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85rem">
+    <span style="color:${ok===false?'#c8422a':'#2a7a4b'}">${ok===false?'⚠️':'✓'}</span>
+    <span>${txt}</span>
+  </div>`;
+}
+
+function _mostrarFinCiclo(tipo) {
+  const ex = document.getElementById('finCicloModal'); if (ex) ex.remove();
+
+  let titulo, cuerpoHtml, accionConfirmar;
+
+  if (tipo === 'egresar3') {
+    const p = _previewEgresar('3');
+    titulo = '🎓 Egresar alumnos de 3°';
+    if (!p.grupos.length) { showToast('No hay grupos de 3° grado registrados', 'info'); return; }
+    cuerpoHtml = `
+      <p style="font-size:0.85rem;color:#555;margin-bottom:10px">Se eliminará <strong>por completo</strong> (los 3 trimestres) el registro de estos grupos: calificaciones, actividades, tareas, conducta, promedios, asistencia — todo.</p>
+      ${p.grupos.map(n => _finCicloRenglon(`Grupo <strong>${escHtml(n)}</strong>`, true)).join('')}
+      <p style="font-size:0.82rem;color:#888;margin-top:10px">Total: <strong>${p.totalAlumnos}</strong> alumno(s) egresado(s).</p>`;
+    accionConfirmar = () => {
+      const n = _eliminarGradoCompleto('3');
+      autoSave(); renderSidebar(); renderMain();
+      showToast(`🎓 ${n} grupo(s) de 3° egresados y eliminados`, 'success');
+    };
+  } else if (tipo === 'promover12' || tipo === 'promover23') {
+    const origen = tipo === 'promover12' ? '1' : '2';
+    const destino = tipo === 'promover12' ? '2' : '3';
+    const p = _previewPromover(origen, destino);
+    titulo = `⬆️ Promover ${origen}° → ${destino}°`;
+    if (!p.grupos.length) { showToast(`No hay grupos de ${origen}° grado registrados`, 'info'); return; }
+    cuerpoHtml = `
+      <p style="font-size:0.85rem;color:#555;margin-bottom:10px">Se conservan los nombres, IDs y códigos de los alumnos. Se borra su historial académico de los 3 trimestres (calificaciones, actividades, tareas, conducta, promedios, asistencia) para empezar limpio en ${destino}°.</p>
+      ${p.renombres.map(r => _finCicloRenglon(`<strong>${escHtml(r.de)}</strong> → <strong>${escHtml(r.a)}</strong>` + (r.reconocido ? '' : ' <span style="color:#c8422a">(no se detectó el patrón de grado en el nombre — revísalo manualmente después)</span>'), r.reconocido)).join('')}
+      <p style="font-size:0.82rem;color:#888;margin-top:10px">Total: <strong>${p.totalAlumnos}</strong> alumno(s) promovido(s).</p>`;
+    accionConfirmar = () => {
+      const r = _promoverGrado(origen, destino);
+      autoSave(); renderSidebar(); renderMain();
+      showToast(`⬆️ ${r.total} grupo(s) promovidos de ${origen}° a ${destino}°`, 'success');
+    };
+  } else if (tipo === 'completo') {
+    const pe = _previewEgresar('3');
+    const p23 = _previewPromover('2', '3');
+    const p12 = _previewPromover('1', '2');
+    titulo = '🎉 Cerrar Ciclo Escolar completo';
+    if (!pe.grupos.length && !p23.grupos.length && !p12.grupos.length) { showToast('No hay grupos registrados', 'info'); return; }
+    cuerpoHtml = `
+      <p style="font-size:0.85rem;color:#555;margin-bottom:10px">Se aplicarán, en este orden, las 3 operaciones de fin de ciclo:</p>
+      <p style="font-size:0.8rem;font-weight:700;color:#c8422a;margin:10px 0 4px">1. Egresar 3° (elimina todo)</p>
+      ${pe.grupos.length ? pe.grupos.map(n => _finCicloRenglon(escHtml(n), true)).join('') : '<div style="font-size:0.8rem;color:#aaa">— No hay grupos de 3°</div>'}
+      <p style="font-size:0.8rem;font-weight:700;color:#b85c00;margin:10px 0 4px">2. Promover 2° → 3°</p>
+      ${p23.grupos.length ? p23.renombres.map(r => _finCicloRenglon(`${escHtml(r.de)} → ${escHtml(r.a)}`, r.reconocido)).join('') : '<div style="font-size:0.8rem;color:#aaa">— No hay grupos de 2°</div>'}
+      <p style="font-size:0.8rem;font-weight:700;color:#2a6a3a;margin:10px 0 4px">3. Promover 1° → 2°</p>
+      ${p12.grupos.length ? p12.renombres.map(r => _finCicloRenglon(`${escHtml(r.de)} → ${escHtml(r.a)}`, r.reconocido)).join('') : '<div style="font-size:0.8rem;color:#aaa">— No hay grupos de 1°</div>'}
+      <p style="font-size:0.82rem;color:#888;margin-top:10px">${pe.totalAlumnos} egresado(s) · ${p23.totalAlumnos} + ${p12.totalAlumnos} alumno(s) promovido(s).</p>`;
+    accionConfirmar = () => {
+      const eg = _eliminarGradoCompleto('3');
+      const r23 = _promoverGrado('2', '3');
+      const r12 = _promoverGrado('1', '2');
+      autoSave(); renderSidebar(); renderMain();
+      showToast(`🎉 Ciclo cerrado: ${eg} grupo(s) egresados, ${r23.total} de 2°→3°, ${r12.total} de 1°→2°`, 'success');
+    };
+  } else return;
+
+  const modal = document.createElement('div');
+  modal.id = 'finCicloModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,26,46,0.55);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);padding:20px';
+  modal.innerHTML = `<div style="background:white;border-radius:14px;padding:26px;width:520px;max-width:96vw;max-height:86vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.3)">
+    <div style="font-family:'DM Serif Display',serif;font-size:1.25rem;margin-bottom:4px">${titulo}</div>
+    <div style="font-size:0.78rem;color:#c8422a;font-weight:700;margin-bottom:16px">⚠️ Esta acción no se puede deshacer</div>
+    ${cuerpoHtml}
+    <div style="background:#fff8f0;border:1.5px solid #f0c080;border-radius:8px;padding:10px 14px;margin-top:16px;font-size:0.78rem;color:#7a5a2a">
+      💡 Recomendación: exporta un respaldo JSON antes de continuar (pestaña de arriba, "📤 Exportar JSON").
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+      <button onclick="document.getElementById('finCicloModal').remove()" style="padding:9px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
+      <button id="finCicloConfirmBtn" style="padding:9px 20px;background:var(--danger);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">Sí, continuar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('finCicloConfirmBtn').onclick = () => { accionConfirmar(); modal.remove(); };
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
 function resetSampleData() {
   pendingConfirm = () => {
     data.groups = buildSampleData();
