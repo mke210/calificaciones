@@ -1475,16 +1475,21 @@ function _migrateGroups() {
       }
     });
   });
-  // ── Asignar grado/grupo real a alumnos que todavía no lo tengan ──
-  // (alumnos creados antes de esta función). Se usa como valor inicial el
-  // grado/grupo del propio grupo/clase — si es una clase combinada
-  // (ej. "Informática 1° ABC") el maestro puede ajustarlo por alumno después.
+  // ── Asignar grado/grupo/sección real a alumnos que todavía no lo tengan ──
+  // (alumnos creados antes de esta función, o antes del sistema de sección).
+  // Se usa como valor inicial el grado/grupo del propio grupo/clase — si es
+  // una clase combinada (ej. "Informática 1° ABC") el maestro puede
+  // ajustarlo por alumno después.
   data.groups.forEach(g => {
     const gradoDefault = _gradoFromGroup(g);
     const grupoDefault = _grupoFromGroupName(g.name);
     (g.students || []).forEach(s => {
       if (!s.grado) s.grado = gradoDefault !== '?' ? gradoDefault : '';
-      if (!s.grupo) s.grupo = grupoDefault;
+      // Si ya tenía "seccion" (sistema previo de Estadísticas), se respeta
+      // y se copia a "grupo" para que ambos campos concuerden.
+      if (s.seccion && !s.grupo) s.grupo = s.seccion;
+      else if (s.grupo && !s.seccion) s.seccion = s.grupo;
+      else if (!s.seccion && !s.grupo) { s.seccion = grupoDefault; s.grupo = grupoDefault; }
     });
   });
 }
@@ -1793,7 +1798,10 @@ function renderGradesTab(container) {
     const grupoReal = _alumnoGrupo(s, g);
     const gradoGrupoTxt = (gradoReal ? gradoReal + '°' : '') + (grupoReal || '');
     const difiereDelGrupo = (gradoReal && gradoReal !== _gradoFromGroup(g)) || (grupoReal && grupoReal !== _grupoFromGroupName(g.name));
-    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}<span onclick="editGradoGrupo('${s.id}')" title="${difiereDelGrupo?'Grado/grupo real del alumno (distinto al de esta clase) — clic para cambiar':'Grado/grupo real del alumno — clic para cambiar'}" style="margin-left:5px;display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em;cursor:pointer;background:${difiereDelGrupo?'#fdeeda':'#eef2fb'};color:${difiereDelGrupo?'#a8600a':'#3a5a9a'}">${gradoGrupoTxt||'Sin grado'}${difiereDelGrupo?' 🔀':''}</span><span onclick="editQRCode('${s.id}')" title="ID del alumno — clic para ver o cambiar" style="margin-left:5px;display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em;cursor:pointer;background:${s.qrCode?'#e0f0e8':'#f0f0f0'};color:${s.qrCode?'#2a6a3a':'#aaa'}">${s.qrCode?escHtml(s.qrCode):'Sin ID'}</span></td>`;
+    const sexoReal = _alumnoSexo(s);
+    const sexoIcon = sexoReal === 'M' ? '♂' : sexoReal === 'F' ? '♀' : '?';
+    const sexoColor = sexoReal === 'M' ? '#2a5a9a' : sexoReal === 'F' ? '#a82a6a' : '#aaa';
+    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}<span onclick="editGradoGrupo('${s.id}')" title="${difiereDelGrupo?'Grado/grupo real del alumno (distinto al de esta clase) — clic para cambiar':'Grado/grupo real del alumno — clic para cambiar'}" style="margin-left:5px;display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em;cursor:pointer;background:${difiereDelGrupo?'#fdeeda':'#eef2fb'};color:${difiereDelGrupo?'#a8600a':'#3a5a9a'}">${gradoGrupoTxt||'Sin grado'}${difiereDelGrupo?' 🔀':''}</span><span onclick="editGradoGrupo('${s.id}')" title="Sexo — clic para cambiar" style="margin-left:5px;display:inline-block;padding:1px 6px;border-radius:9px;font-size:0.7rem;font-weight:700;cursor:pointer;background:#f5f2ec;color:${sexoColor}">${sexoIcon}</span><span onclick="editQRCode('${s.id}')" title="ID del alumno — clic para ver o cambiar" style="margin-left:5px;display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em;cursor:pointer;background:${s.qrCode?'#e0f0e8':'#f0f0f0'};color:${s.qrCode?'#2a6a3a':'#aaa'}">${s.qrCode?escHtml(s.qrCode):'Sin ID'}</span></td>`;
     g.activities.forEach(a => {
       const key = s.id+'_'+a.id;
       const val = g.grades[key]!==undefined ? g.grades[key] : '';
@@ -2358,13 +2366,13 @@ function _gradoFromGroup(g) {
   return _parseGrado(g.name);
 }
 
-// Letra de grupo (A-F) a partir del nombre — mismo criterio que usa el Portal,
+// Letra de grupo (A-I) a partir del nombre — mismo criterio que usa el Portal,
 // para que ambos sistemas entiendan "grupo" exactamente igual.
 function _grupoFromGroupName(name) {
   if (!name) return '';
-  const m = name.match(/[1-3]°?\s*([A-Fa-f])(?=\s|$|[^A-Za-z])/);
+  const m = name.match(/[1-3]°?\s*([A-Ia-i])(?=\s|$|[^A-Za-z])/);
   if (m) return m[1].toUpperCase();
-  const m2 = name.match(/(?:PRIMERO|SEGUNDO|TERCERO)\s*([A-Fa-f])(?=\s|$|[^A-Za-z])/i);
+  const m2 = name.match(/(?:PRIMERO|SEGUNDO|TERCERO)\s*([A-Ia-i])(?=\s|$|[^A-Za-z])/i);
   if (m2) return m2[1].toUpperCase();
   return '';
 }
@@ -2372,8 +2380,11 @@ function _grupoFromGroupName(name) {
 // Grado/grupo REAL de un alumno: usa lo que tenga guardado el propio alumno
 // (para clases combinadas, ej. "Informática 1° ABC" con alumnos de 1°A/B/C);
 // si no tiene nada guardado, cae de vuelta al grado/grupo del grupo/clase.
+// s.seccion es el mismo campo que ya usa la pestaña Estadísticas — se
+// prioriza para que ambos lugares del sistema concuerden siempre.
 function _alumnoGrado(s, g) { return (s && s.grado) ? s.grado : _gradoFromGroup(g); }
-function _alumnoGrupo(s, g) { return (s && s.grupo) ? s.grupo : _grupoFromGroupName(g.name); }
+function _alumnoGrupo(s, g) { return (s && s.seccion) ? s.seccion : (s && s.grupo) ? s.grupo : _grupoFromGroupName(g.name); }
+function _alumnoSexo(s) { return (s && (s.gender === 'M' || s.gender === 'F')) ? s.gender : _detectarGenero(s ? s.name : '', s); }
 
 function _gradoLabel(g) {
   const map = { '1':'1° Grado', '2':'2° Grado', '3':'3° Grado',
@@ -5823,6 +5834,51 @@ function addActivity(){
 }
 
 // ---- QUICK ADD MODAL ----
+// Campos extra del modal "Agregar Alumno": grado, grupo/sección real,
+// sexo y a qué clase (grupo general) se agregan — para capturarlo una sola
+// vez aquí y que Estadísticas (y el Portal) solo lo lean, sin reclasificar.
+function _quickAddStudentFieldsHtml() {
+  const g = currentGroup();
+  const gradoDefault = g ? _gradoFromGroup(g) : '?';
+  const grupoDefault = g ? _grupoFromGroupName(g.name) : '';
+  const letras = ['A','B','C','D','E','F','G','H','I'];
+  // Clases/grupos existentes (destino), sin repetir por trimestre
+  const nombresClases = [...new Set(data.groups.map(x => x.name))].sort((a,b)=>a.localeCompare(b,'es'));
+  return `
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <div style="flex:1">
+        <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">Grado</label>
+        <select id="qaGrado" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.88rem;font-family:'DM Sans',sans-serif">
+          <option value="1" ${gradoDefault==='1'?'selected':''}>1°</option>
+          <option value="2" ${gradoDefault==='2'?'selected':''}>2°</option>
+          <option value="3" ${gradoDefault==='3'?'selected':''}>3°</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">Grupo</label>
+        <select id="qaGrupo" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.88rem;font-family:'DM Sans',sans-serif">
+          ${letras.map(l=>`<option value="${l}" ${grupoDefault===l?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div style="flex:1">
+        <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">Sexo</label>
+        <select id="qaSexo" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.88rem;font-family:'DM Sans',sans-serif">
+          <option value="auto">Detectar</option>
+          <option value="M">♂ Hombre</option>
+          <option value="F">♀ Mujer</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">¿A qué grupo general va? (clase donde se registran sus calificaciones)</label>
+      <select id="qaClaseDestino" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.88rem;font-family:'DM Sans',sans-serif">
+        ${nombresClases.map(n=>`<option value="${escHtml(n)}" ${g && n===g.name?'selected':''}>${escHtml(n)}</option>`).join('')}
+      </select>
+      <div style="font-size:0.68rem;color:#aaa;margin-top:4px">Ej: "Primero ABC" si das clase a varios grupos juntos (como Informática). El grado/grupo de arriba es el real del alumno, aunque la clase sea combinada.</div>
+    </div>
+  `;
+}
+
 function openQuickModal(type) {
   const isStudent = type === 'student';
   const existing = document.getElementById('quickAddModal');
@@ -5863,6 +5919,7 @@ function openQuickModal(type) {
         onblur="this.style.boxShadow='none'"
       />
       <div id="quickAddMultiHint" style="font-size:0.72rem;color:#bbb;margin-top:6px;min-height:18px"></div>
+      ${isStudent ? _quickAddStudentFieldsHtml() : ''}
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
         <button onclick="closeQuickModal()"
           style="padding:9px 20px;border:1.5px solid var(--border);background:var(--cream);
@@ -5921,16 +5978,29 @@ function confirmQuickAdd(type) {
   _snapshot();
   if (type === 'student') {
     const usedCodes = _allQrCodesInUse();
-    const gradoDefault = _gradoFromGroup(g);
-    const grupoDefault = _grupoFromGroupName(g.name);
+    const gradoSel = document.getElementById('qaGrado');
+    const grupoSel = document.getElementById('qaGrupo');
+    const sexoSel  = document.getElementById('qaSexo');
+    const destSel  = document.getElementById('qaClaseDestino');
+    const gradoElegido = gradoSel ? gradoSel.value : (_gradoFromGroup(g) !== '?' ? _gradoFromGroup(g) : '');
+    const grupoElegido = grupoSel ? grupoSel.value : _grupoFromGroupName(g.name);
+    const sexoElegido  = sexoSel ? sexoSel.value : 'auto';
+    const claseDestino = destSel ? destSel.value : g.name;
+    // La clase destino puede tener otro nombre (ej. agregar a "Primero ABC"
+    // aunque estés viendo otra clase) — se usa la instancia del mismo
+    // trimestre que se está viendo actualmente.
+    const gDestino = data.groups.find(x => x.name === claseDestino && x.trimestre === g.trimestre) || g;
     names.forEach(n => {
       const code = genAlumnoId(usedCodes);
       usedCodes.add(code);
-      g.students.push({
+      const gender = sexoElegido === 'M' || sexoElegido === 'F' ? sexoElegido : _detectarGenero(n, null);
+      gDestino.students.push({
         id: Date.now().toString(36)+Math.random().toString(36).slice(2),
         name: n, qrCode: code,
-        grado: gradoDefault !== '?' ? gradoDefault : '',
-        grupo: grupoDefault
+        grado: gradoElegido,
+        seccion: grupoElegido,
+        grupo: grupoElegido, // mirror por compatibilidad
+        gender
       });
     });
     closeQuickModal();
@@ -7570,14 +7640,15 @@ function editGradoGrupo(sid){
   const ex=document.getElementById('gradoGrupoModal');if(ex)ex.remove();
   const gradoActual = _alumnoGrado(s, g);
   const grupoActual = _alumnoGrupo(s, g);
+  const sexoActual = _alumnoSexo(s);
   const gradoDefault = _gradoFromGroup(g);
   const grupoDefault = _grupoFromGroupName(g.name);
   const modal=document.createElement('div');modal.id='gradoGrupoModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:400;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
-  modal.innerHTML=`<div style="background:white;border-radius:12px;padding:28px;width:400px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
-    <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:6px">🏫 Grado y Grupo real</div>
+  modal.innerHTML=`<div style="background:white;border-radius:12px;padding:28px;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
+    <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:6px">🏫 Grado, Grupo y Sexo</div>
     <div style="font-size:0.8rem;color:#888;margin-bottom:6px">Alumno: <strong>${escHtml(s.name)}</strong></div>
-    <div style="font-size:0.74rem;color:#aaa;margin-bottom:16px">Útil si das clase a varios grupos juntos (ej. "1° ABC"): aquí queda el grado/grupo real del alumno para boletas y el Portal, aunque esta clase reúna a varios grupos.</div>
+    <div style="font-size:0.74rem;color:#aaa;margin-bottom:16px">Útil si das clase a varios grupos juntos (ej. "1° ABC"): aquí queda el grado/grupo real del alumno para boletas, Estadísticas y el Portal, aunque esta clase reúna a varios grupos.</div>
     <div style="display:flex;gap:10px;margin-bottom:8px">
       <div class="form-row" style="flex:1;margin:0">
         <label style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:6px">Grado</label>
@@ -7590,7 +7661,14 @@ function editGradoGrupo(sid){
       <div class="form-row" style="flex:1;margin:0">
         <label style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:6px">Grupo</label>
         <select id="ggGrupoInput" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:0.95rem;font-family:'DM Sans',sans-serif">
-          ${['A','B','C','D','E','F'].map(l=>`<option value="${l}" ${grupoActual===l?'selected':''}>${l}</option>`).join('')}
+          ${['A','B','C','D','E','F','G','H','I'].map(l=>`<option value="${l}" ${grupoActual===l?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row" style="flex:1;margin:0">
+        <label style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:6px">Sexo</label>
+        <select id="ggSexoInput" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:0.95rem;font-family:'DM Sans',sans-serif">
+          <option value="M" ${sexoActual==='M'?'selected':''}>♂ Hombre</option>
+          <option value="F" ${sexoActual==='F'?'selected':''}>♀ Mujer</option>
         </select>
       </div>
     </div>
@@ -7609,17 +7687,21 @@ function editGradoGrupo(sid){
 function guardarGradoGrupo(sid){
   const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
   s.grado = document.getElementById('ggGradoInput').value;
-  s.grupo = document.getElementById('ggGrupoInput').value;
+  const nuevoGrupo = document.getElementById('ggGrupoInput').value;
+  s.seccion = nuevoGrupo;
+  s.grupo = nuevoGrupo; // mirror por compatibilidad
+  s.gender = document.getElementById('ggSexoInput').value;
   autoSave(); renderMain();
   const m=document.getElementById('gradoGrupoModal'); if(m) m.remove();
-  showToast(`✓ ${s.name}: grado/grupo actualizado a ${s.grado}°${s.grupo}`,'success');
+  showToast(`✓ ${s.name}: actualizado a ${s.grado}°${s.seccion} · ${s.gender==='M'?'♂':'♀'}`,'success');
 }
 function _restaurarGradoGrupoDefault(sid){
   const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
   const gradoDefault = _gradoFromGroup(g);
   const grupoDefault = _grupoFromGroupName(g.name);
   s.grado = gradoDefault !== '?' ? gradoDefault : '';
-  s.grupo = grupoDefault;
+  s.seccion = grupoDefault;
+  s.grupo = grupoDefault; // mirror por compatibilidad
   autoSave(); renderMain();
   const m=document.getElementById('gradoGrupoModal'); if(m) m.remove();
   showToast(`✓ ${s.name}: grado/grupo restaurado al de esta clase`,'success');
