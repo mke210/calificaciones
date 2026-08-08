@@ -1131,30 +1131,6 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
   </div>
 </div>
 
-<!-- MODAL: Detalle de Tarea -->
-<div class="overlay" id="modalHWDetail">
-  <div class="modal">
-    <div class="modal-title" id="hwDetailTitle">📋 Estado de Tarea</div>
-    <div class="form-row">
-      <label>Estado de entrega</label>
-      <select id="hwStatusSelect">
-        <option value="">— Sin registrar —</option>
-        <option value="entregado">✅ Entregado</option>
-        <option value="tarde">⏰ Entregado tarde</option>
-        <option value="pendiente">❌ No entregado</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <label>Nota / Observación</label>
-      <textarea id="hwNoteInput" placeholder="Ej: Entregó incompleto, faltó la parte 2..."></textarea>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modalHWDetail')">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveHWDetail()">Guardar</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL: Confirmar -->
 <div class="overlay" id="modalConfirm">
   <div class="modal">
@@ -1749,7 +1725,7 @@ function _renderMainInner() {
     </div>
     <div class="tabs">
       <button class="tab ${currentTab==='calificaciones'?'active':''}" onclick="switchTab('calificaciones')">📊 Calificaciones</button>
-      <button class="tab ${currentTab==='tareas'?'active':''}" onclick="switchTab('tareas')">📝 Reporte de Tareas</button>
+      <button class="tab ${currentTab==='alumnos'?'active':''}" onclick="switchTab('alumnos')">👨‍🎓 Alumnos</button>
       <button class="tab ${currentTab==='estadisticas'?'active':''}" onclick="switchTab('estadisticas')">📈 Estadísticas</button>
       <button class="tab ${currentTab==='reporte_final'?'active':''}" onclick="switchTab('reporte_final')">🏆 Reporte Final</button>
       <button class="tab ${currentTab==='asistencia'?'active':''}" onclick="switchTab('asistencia')" style="color:${currentTab==='asistencia'?'var(--green)':''};border-bottom-color:${currentTab==='asistencia'?'var(--green)':' transparent'}">✅ Asistencia</button>
@@ -1765,7 +1741,7 @@ function switchTab(t) { currentTab = t; renderMain(); }
 function renderTab() {
   const c = document.getElementById('tabContent'); if (!c) return;
   if (currentTab==='calificaciones') renderGradesTab(c);
-  else if (currentTab==='tareas') renderHomeworkTab(c);
+  else if (currentTab==='alumnos') renderAlumnosTab(c);
   else if (currentTab==='estadisticas') renderEstadisticasTab(c);
   else if (currentTab==='reporte_final') renderReporteFinal(c);
   else if (currentTab==='asistencia') renderAsistenciaTab(c);
@@ -1794,14 +1770,7 @@ function renderGradesTab(container) {
     const incidents = cData.incidents || [];
     const rowStyle = inactive ? 'opacity:0.42;background:#f8f6f2;' : '';
     const nameStyle = inactive ? 'text-decoration:line-through;color:#aaa;' : '';
-    const gradoReal = _alumnoGrado(s, g);
-    const grupoReal = _alumnoGrupo(s, g);
-    const gradoGrupoTxt = (gradoReal ? gradoReal + '°' : '') + (grupoReal || '');
-    const difiereDelGrupo = (gradoReal && gradoReal !== _gradoFromGroup(g)) || (grupoReal && grupoReal !== _grupoFromGroupName(g.name));
-    const sexoReal = _alumnoSexo(s);
-    const sexoIcon = sexoReal === 'M' ? '♂' : sexoReal === 'F' ? '♀' : '?';
-    const sexoColor = sexoReal === 'M' ? '#2a5a9a' : sexoReal === 'F' ? '#a82a6a' : '#aaa';
-    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}<span onclick="editGradoGrupo('${s.id}')" title="${difiereDelGrupo?'Grado/grupo real del alumno (distinto al de esta clase) — clic para cambiar':'Grado/grupo real del alumno — clic para cambiar'}" style="margin-left:5px;display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em;cursor:pointer;background:${difiereDelGrupo?'#fdeeda':'#eef2fb'};color:${difiereDelGrupo?'#a8600a':'#3a5a9a'}">${gradoGrupoTxt||'Sin grado'}${difiereDelGrupo?' 🔀':''}</span><span onclick="editGradoGrupo('${s.id}')" title="Sexo — clic para cambiar" style="margin-left:5px;display:inline-block;padding:1px 6px;border-radius:9px;font-size:0.7rem;font-weight:700;cursor:pointer;background:#f5f2ec;color:${sexoColor}">${sexoIcon}</span><span onclick="editQRCode('${s.id}')" title="ID del alumno — clic para ver o cambiar" style="margin-left:5px;display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em;cursor:pointer;background:${s.qrCode?'#e0f0e8':'#f0f0f0'};color:${s.qrCode?'#2a6a3a':'#aaa'}">${s.qrCode?escHtml(s.qrCode):'Sin ID'}</span></td>`;
+    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}</td>`;
     g.activities.forEach(a => {
       const key = s.id+'_'+a.id;
       const val = g.grades[key]!==undefined ? g.grades[key] : '';
@@ -1896,197 +1865,117 @@ function renderGradesTab(container) {
   });
 }
 
-// ---- HOMEWORK TAB ----
+// ---- ALUMNOS TAB ----
 let selectedStudentId = null;
+let _alumnosFiltro = { grado: 'todos', grupo: 'todos' };
 
-function renderHomeworkTab(container) {
-  const g = currentGroup();
-  if (!g.students.length) {
-    container.innerHTML = `<div class="empty"><div class="icon">📝</div><p>Agrega alumnos para ver el reporte de tareas.</p></div>`;
-    return;
-  }
+function _alumnosSetFiltro(campo, val) {
+  _alumnosFiltro[campo] = val;
+  renderTab();
+}
 
-  // If selected student no longer exists, reset
-  if (selectedStudentId && !g.students.find(s=>s.id===selectedStudentId)) selectedStudentId = null;
-
-  const clabels = ['','⭐ Excelente','⚠️ Regular','🔶 Mala conducta','🔴 Muy grave'];
-  const cclass  = ['','conduct-1','conduct-2','conduct-3','conduct-4'];
-
-  // --- STUDENT SELECTOR ---
-  let html = `<div style="margin-bottom:20px">
-    <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:10px">Seleccionar Alumno</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;">`;
-  g.students.forEach((s, sIdx) => {
-    const active = s.id === selectedStudentId;
-    html += `<button onclick="selectHWStudent('${s.id}')" style="padding:8px 18px;border-radius:20px;border:2px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'white'};color:${active?'white':'var(--ink)'};font-family:inherit;font-size:0.85rem;font-weight:${active?'700':'500'};cursor:pointer;transition:all 0.15s;">${escHtml(s.name)}</button>`;
-  });
-  html += `</div></div>`;
-
-  if (!selectedStudentId) {
-    html += `<div class="empty" style="padding:40px 20px"><div class="icon">👆</div><p>Selecciona un alumno para ver su reporte completo.</p></div>`;
-    container.innerHTML = html;
-    return;
-  }
-
-  const s = g.students.find(x=>x.id===selectedStudentId);
-  if (!s) { container.innerHTML = html; return; }
-
-  const cd = g.conduct[s.id] || {};
-  const cLev = cd.level || 0;
-  const incidents = cd.incidents || [];
-  const avg = calcAvg(g, s.id);
-  const avgStr = avg !== null ? formatStudentAvg(avg) : '-';
-  const avgCls = avg !== null ? gradeClass(roundStudentAvg(avg)||avg) : '';
-
-  // Counters
-  let hwDel=0, hwLate=0, hwMiss=0, hwNone=0;
-  [...g.activities].sort((a,b)=>String(a.id).localeCompare(String(b.id))).forEach(a => {
-    const grade = g.grades[s.id+'_'+a.id];
-    if (grade === 'NE') hwMiss++;
-    else if (typeof grade==='string' && grade.startsWith('T:')) hwLate++;
-    else if (grade !== undefined && grade !== '') hwDel++;
-    else hwNone++;
-  });
-
-  // --- REPORT CARD ---
-  html += `<div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;">
-
-    <!-- HEADER -->
-    <div style="background:var(--ink);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <div>
-        <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:white">${escHtml(s.name)}</div>
-        <div style="font-size:0.78rem;color:rgba(255,255,255,0.5);margin-top:2px">${g.subject||g.name}</div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <span class="grade-badge ${avgCls}" style="font-size:1rem;padding:6px 18px;">Promedio Final: ${avgStr}</span>
-        ${cLev>0?`<span class="conduct-badge ${cclass[cLev]}">${clabels[cLev]}</span>`:''}
-        <button onclick="printStudentReport('${s.id}')" style="padding:7px 14px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:white;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">🖨️ Imprimir</button>
-        <button onclick="shareWhatsApp('${s.id}')" style="padding:7px 14px;border-radius:6px;border:none;background:#25D366;color:white;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">📱 WhatsApp</button>
-      </div>
-    </div>
-
-    <!-- SUMMARY PILLS -->
-    <div style="display:flex;gap:0;border-bottom:1.5px solid var(--cream);">
-      <div style="flex:1;padding:14px 18px;text-align:center;border-right:1px solid var(--cream);">
-        <div style="font-size:1.4rem;font-family:'DM Serif Display',serif;color:var(--green)">${hwDel}</div>
-        <div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Entregados</div>
-      </div>
-      <div style="flex:1;padding:14px 18px;text-align:center;border-right:1px solid var(--cream);">
-        <div style="font-size:1.4rem;font-family:'DM Serif Display',serif;color:var(--orange)">${hwLate}</div>
-        <div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Tarde</div>
-      </div>
-      <div style="flex:1;padding:14px 18px;text-align:center;border-right:1px solid var(--cream);">
-        <div style="font-size:1.4rem;font-family:'DM Serif Display',serif;color:var(--danger)">${hwMiss}</div>
-        <div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">No entregados</div>
-      </div>
-      <div style="flex:1;padding:14px 18px;text-align:center;">
-        <div style="font-size:1.4rem;font-family:'DM Serif Display',serif;color:#aaa">${hwNone}</div>
-        <div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Sin registrar</div>
-      </div>
-    </div>
-
-    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;">`;
-
-  // --- TRABAJOS TABLE ---
-  if (g.activities.length > 0) {
-    html += `<div>
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:10px">📚 Trabajos y Calificaciones</div>
-      <table class="hw-table" style="border:1px solid var(--cream);border-radius:8px;overflow:hidden;">
-        <thead><tr>
-          <th style="width:40%">Nombre del Trabajo</th>
-          <th style="text-align:center">Calificación</th>
-          <th style="text-align:center">Estado de Entrega</th>
-          <th>Observación</th>
-        </tr></thead>
-        <tbody>`;
-    const sortedActs = [...g.activities].sort((a,b)=> String(a.id).localeCompare(String(b.id)));
-    sortedActs.forEach(a => {
-      const key = s.id+'_'+a.id;
-      const grade = g.grades[key];
-      const hw = g.hwStatus[key] || {};
-      const hwStatus = hw.status || '';
-      const hwNote = hw.note || '';
-
-      let gradeDisplay='—', gradeCls='', rowBg='';
-      if (grade==='NE') {
-        gradeDisplay='NE'; gradeCls='grade-D'; rowBg='background:#fff8f8;';
-      } else if (typeof grade==='string' && grade.startsWith('T:')) {
-        const num=grade.slice(2);
-        gradeDisplay=num!==''?`⏰ ${num}`:'⏰ —';
-        gradeCls='conduct-3'; rowBg='background:#fffaf5;';
-      } else if (typeof grade==='string' && grade.startsWith('IN:')) {
-        const num=grade.slice(3);
-        gradeDisplay=num!==''?`🏥 ${num}`:'🏥 —';
-        gradeCls=''; rowBg='background:#f8f0ff;';
-      } else if (grade!==undefined && grade!=='') {
-        gradeCls=gradeClass(parseFloat(grade)); gradeDisplay=grade;
-      }
-
-      const hwLabel = hwStatus==='entregado'?'✅ Entregado':hwStatus==='tarde'?'⏰ Tarde':hwStatus==='pendiente'?'❌ No entregado':'—';
-      const hwCls   = hwStatus==='entregado'?'hw-status-yes':hwStatus==='tarde'?'hw-status-late':hwStatus==='pendiente'?'hw-status-no':'';
-
-      html += `<tr style="${rowBg}">
-        <td style="font-weight:500">${escHtml(a.name)}</td>
-        <td style="text-align:center"><span class="grade-badge ${gradeCls}" style="padding:2px 10px;${gradeCls===''&&gradeDisplay.startsWith('🏥')?'background:#e8d5f0;color:#5a2d7a;':''}">${gradeDisplay}</span></td>
-        <td style="text-align:center;font-size:0.82rem" class="${hwCls}">${hwLabel}</td>
-        <td style="font-size:0.8rem;color:#888">${hwNote?escHtml(hwNote):'<span style="color:#ddd">—</span>'}</td>
-      </tr>`;
+// Alumnos únicos de TODOS los grupos/clases, con su grado/grupo/sexo real
+// (misma lógica que usa Estadísticas y el Portal, para que concuerden).
+function _todosLosAlumnosUnicos() {
+  const vistos = new Set();
+  const out = [];
+  data.groups.forEach(g => {
+    (g.students || []).forEach(s => {
+      const key = s.qrCode || s.id;
+      if (vistos.has(key)) return;
+      vistos.add(key);
+      out.push({ s, g, grado: _alumnoGrado(s, g), grupo: _alumnoGrupo(s, g), sexo: _alumnoSexo(s) });
     });
-    html += `</tbody></table></div>`;
-  } else {
-    html += `<div style="color:#aaa;font-size:0.88rem;text-align:center;padding:20px">Sin actividades registradas en este grupo.</div>`;
+  });
+  return out;
+}
+
+function renderAlumnosTab(container) {
+  const todos = _todosLosAlumnosUnicos();
+  if (!todos.length) {
+    container.innerHTML = `<div class="empty"><div class="icon">👨‍🎓</div><p>Aún no hay alumnos registrados.<br>Haz clic en <strong>+ Alumno</strong> para agregar.</p></div>`;
+    return;
   }
 
-  // --- CONDUCTA ---
-  html += `<div style="background:var(--conduct-bg);border:1px solid var(--conduct-border);border-radius:8px;padding:16px 20px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${incidents.length?'12px':'0'}">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888">🚨 Conducta</div>
-      ${cLev>0?`<span class="conduct-badge ${cclass[cLev]}">${clabels[cLev]}</span>`:`<span style="font-size:0.82rem;color:#bbb">Sin registro de conducta</span>`}
+  const gradosDisponibles = [...new Set(todos.map(a => a.grado).filter(Boolean))].sort();
+  const gruposDisponibles = [...new Set(todos.map(a => a.grupo).filter(Boolean))].sort();
+
+  let filtrados = todos;
+  if (_alumnosFiltro.grado !== 'todos') filtrados = filtrados.filter(a => a.grado === _alumnosFiltro.grado);
+  if (_alumnosFiltro.grupo !== 'todos') filtrados = filtrados.filter(a => a.grupo === _alumnosFiltro.grupo);
+
+  filtrados = [...filtrados].sort((a, b) => {
+    if (a.grado !== b.grado) return (a.grado || 'Z').localeCompare(b.grado || 'Z');
+    if (a.grupo !== b.grupo) return (a.grupo || 'Z').localeCompare(b.grupo || 'Z');
+    return a.s.name.localeCompare(b.s.name, 'es');
+  });
+
+  container.innerHTML = `
+    <div class="table-container">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:14px 16px;background:var(--cream);border-bottom:1.5px solid var(--border)">
+        <div>
+          <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">Grado</label>
+          <select onchange="_alumnosSetFiltro('grado',this.value)" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.85rem;font-family:'DM Sans',sans-serif">
+            <option value="todos" ${_alumnosFiltro.grado==='todos'?'selected':''}>Todos</option>
+            ${gradosDisponibles.map(gr => `<option value="${gr}" ${_alumnosFiltro.grado===gr?'selected':''}>${gr}°</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">Grupo</label>
+          <select onchange="_alumnosSetFiltro('grupo',this.value)" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.85rem;font-family:'DM Sans',sans-serif">
+            <option value="todos" ${_alumnosFiltro.grupo==='todos'?'selected':''}>Todos</option>
+            ${gruposDisponibles.map(gp => `<option value="${gp}" ${_alumnosFiltro.grupo===gp?'selected':''}>${gp}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <label style="display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:4px">Buscar</label>
+          <input id="alumnosBuscar" type="text" placeholder="🔍 Nombre o código ID…" oninput="_filtrarAlumnosTabla()"
+            style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.85rem;font-family:'DM Sans',sans-serif;outline:none">
+        </div>
+        <div id="alumnosContador" style="font-size:0.8rem;color:#888;padding-bottom:8px;white-space:nowrap">${filtrados.length} de ${todos.length} alumno${todos.length!==1?'s':''}</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:36px;text-align:center;padding:8px 4px;font-size:0.78rem;background:var(--ink)">#</th>
+            <th style="min-width:180px">Nombre</th>
+            <th style="width:80px;text-align:center">Grado</th>
+            <th style="width:80px;text-align:center">Grupo</th>
+            <th style="width:60px;text-align:center">Sexo</th>
+            <th style="width:120px;text-align:center">Código ID</th>
+            <th style="min-width:150px">Clase</th>
+          </tr></thead>
+          <tbody id="alumnosTablaBody">
+            ${filtrados.map((a, i) => `
+              <tr data-search="${escHtml((a.s.name + ' ' + (a.s.qrCode||'')).toLowerCase())}">
+                <td style="text-align:center;padding:6px 4px;font-size:0.82rem;font-weight:700;color:#aaa;background:#fafafa">${i+1}</td>
+                <td style="padding:6px 10px">${escHtml(a.s.name)}</td>
+                <td style="text-align:center;cursor:pointer" onclick="editGradoGrupo('${a.s.id}','${a.g.id}')" title="Clic para editar grado, grupo y sexo">${a.grado?a.grado+'°':'—'}</td>
+                <td style="text-align:center;cursor:pointer" onclick="editGradoGrupo('${a.s.id}','${a.g.id}')" title="Clic para editar grado, grupo y sexo">${a.grupo||'—'}</td>
+                <td style="text-align:center;cursor:pointer" onclick="editGradoGrupo('${a.s.id}','${a.g.id}')" title="Clic para editar grado, grupo y sexo">${a.sexo==='M'?'♂':a.sexo==='F'?'♀':'—'}</td>
+                <td style="text-align:center;cursor:pointer" onclick="editQRCode('${a.s.id}','${a.g.id}')" title="Clic para ver o cambiar el ID"><span style="background:#eef2fb;color:#3a5a9a;padding:2px 9px;border-radius:9px;font-weight:700;font-size:0.78rem;letter-spacing:0.03em">${escHtml(a.s.qrCode||'Sin ID')}</span></td>
+                <td style="color:#888;font-size:0.85rem">${escHtml(a.g.name)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>`;
-  if (incidents.length > 0) {
-    html += `<div class="conduct-incidents">`;
-    incidents.forEach(inc => {
-      html += `<div class="conduct-incident-row"><span class="inc-date">${inc.date}</span><span class="inc-reason">${escHtml(inc.text)}</span></div>`;
-    });
-    html += `</div>`;
-  }
-  html += `</div>`;
-
-  html += `</div></div>`; // close padding div + card
-
-  container.innerHTML = html;
 }
 
-function selectHWStudent(id) {
-  selectedStudentId = id;
-  currentTab = 'tareas';
-  renderMain();
-}
-
-function quickSetHWStatus(sid, aid, status) {
-  const g = currentGroup(); if (!g.hwStatus) g.hwStatus = {};
-  const key = sid+'_'+aid;
-  if (!g.hwStatus[key]) g.hwStatus[key] = {};
-  g.hwStatus[key].status = status; autoSave();
-}
-function openHWDetail(sid, aid) {
-  const g = currentGroup(); if (!g.hwStatus) g.hwStatus = {};
-  const key = sid+'_'+aid; const hw = g.hwStatus[key] || {};
-  hwDetailSid = sid; hwDetailAid = aid;
-  const s = g.students.find(x=>x.id===sid); const a = g.activities.find(x=>x.id===aid);
-  document.getElementById('hwDetailTitle').textContent = `📋 ${s?s.name:''} — ${a?a.name:''}`;
-  document.getElementById('hwStatusSelect').value = hw.status||'';
-  document.getElementById('hwNoteInput').value = hw.note||'';
-  openModal('modalHWDetail');
-}
-function saveHWDetail() {
-  const g = currentGroup(); if (!g.hwStatus) g.hwStatus = {};
-  const key = hwDetailSid+'_'+hwDetailAid;
-  if (!g.hwStatus[key]) g.hwStatus[key] = {};
-  g.hwStatus[key].status = document.getElementById('hwStatusSelect').value;
-  g.hwStatus[key].note = document.getElementById('hwNoteInput').value.trim();
-  autoSave(); closeModal('modalHWDetail'); currentTab='tareas'; renderMain();
-  showToast('Estado de tarea guardado', 'success');
+// Filtro de texto en vivo — filtra filas por DOM directo (no vuelve a
+// renderizar toda la tabla) para no perder el foco mientras se escribe.
+function _filtrarAlumnosTabla() {
+  const q = (document.getElementById('alumnosBuscar')?.value || '').toLowerCase().trim();
+  let visibles = 0, total = 0;
+  document.querySelectorAll('#alumnosTablaBody tr').forEach(tr => {
+    total++;
+    const match = !q || (tr.dataset.search || '').includes(q);
+    tr.style.display = match ? '' : 'none';
+    if (match) visibles++;
+  });
+  const contador = document.getElementById('alumnosContador');
+  if (contador) contador.textContent = `${visibles} de ${total} alumno${total!==1?'s':''}`;
 }
 
 // ---- CONDUCT MODAL ----
@@ -7635,8 +7524,9 @@ td.n{font-weight:600;color:#1a1a2e;background:#f8f6f0}td.c{text-align:center;fon
 }
 
 // ── ASIGNAR CÓDIGO QR EXTERNO ──────────────────────────────────
-function editGradoGrupo(sid){
-  const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
+function editGradoGrupo(sid, gid){
+  const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
+  const s = g && g.students.find(x=>x.id===sid); if(!g || !s) return;
   const ex=document.getElementById('gradoGrupoModal');if(ex)ex.remove();
   const gradoActual = _alumnoGrado(s, g);
   const grupoActual = _alumnoGrupo(s, g);
@@ -7674,18 +7564,19 @@ function editGradoGrupo(sid){
     </div>
     <div style="font-size:0.72rem;color:#aaa;margin-bottom:16px">Grado/grupo de esta clase: <strong>${gradoDefault!=='?'?gradoDefault+'°':'—'}${grupoDefault||''}</strong></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-      <button onclick="_restaurarGradoGrupoDefault('${sid}')" style="padding:7px 12px;background:transparent;color:#888;border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.76rem;font-weight:600;cursor:pointer">↺ Usar el de esta clase</button>
+      <button onclick="_restaurarGradoGrupoDefault('${sid}','${g.id}')" style="padding:7px 12px;background:transparent;color:#888;border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.76rem;font-weight:600;cursor:pointer">↺ Usar el de esta clase</button>
       <div style="display:flex;gap:8px">
         <button onclick="document.getElementById('gradoGrupoModal').remove()" style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
-        <button onclick="guardarGradoGrupo('${sid}')" style="padding:8px 20px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">✅ Guardar</button>
+        <button onclick="guardarGradoGrupo('${sid}','${g.id}')" style="padding:8px 20px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">✅ Guardar</button>
       </div>
     </div>
   </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
 }
-function guardarGradoGrupo(sid){
-  const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
+function guardarGradoGrupo(sid, gid){
+  const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
+  const s = g && g.students.find(x=>x.id===sid); if(!g || !s) return;
   s.grado = document.getElementById('ggGradoInput').value;
   const nuevoGrupo = document.getElementById('ggGrupoInput').value;
   s.seccion = nuevoGrupo;
@@ -7695,8 +7586,9 @@ function guardarGradoGrupo(sid){
   const m=document.getElementById('gradoGrupoModal'); if(m) m.remove();
   showToast(`✓ ${s.name}: actualizado a ${s.grado}°${s.seccion} · ${s.gender==='M'?'♂':'♀'}`,'success');
 }
-function _restaurarGradoGrupoDefault(sid){
-  const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
+function _restaurarGradoGrupoDefault(sid, gid){
+  const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
+  const s = g && g.students.find(x=>x.id===sid); if(!g || !s) return;
   const gradoDefault = _gradoFromGroup(g);
   const grupoDefault = _grupoFromGroupName(g.name);
   s.grado = gradoDefault !== '?' ? gradoDefault : '';
@@ -7707,8 +7599,9 @@ function _restaurarGradoGrupoDefault(sid){
   showToast(`✓ ${s.name}: grado/grupo restaurado al de esta clase`,'success');
 }
 
-function editQRCode(sid){
-  const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
+function editQRCode(sid, gid){
+  const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
+  const s = g && g.students.find(x=>x.id===sid); if(!g || !s) return;
   const ex=document.getElementById('qrCodeModal');if(ex)ex.remove();
   const modal=document.createElement('div');modal.id='qrCodeModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:400;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
@@ -7720,7 +7613,7 @@ function editQRCode(sid){
       <div style="display:flex;gap:8px">
         <input id="qrCodeInput" type="text" value="${escHtml(s.qrCode||'')}" placeholder="Ej: WPBQ, A1B2, 1234..."
           style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:6px;font-size:0.95rem;font-family:'DM Sans',sans-serif;outline:none"
-          onkeydown="if(event.key==='Enter')saveQRCode('${sid}')"/>
+          onkeydown="if(event.key==='Enter')saveQRCode('${sid}','${g.id}')"/>
         <button onclick="regenerarQRCode('${sid}')" style="padding:10px 14px;background:var(--orange);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">🔄 Generar otro</button>
         <button onclick="escanearQRParaAsignar('${sid}')" style="padding:10px 14px;background:var(--blue);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">📷 Escanear</button>
       </div>
@@ -7729,10 +7622,10 @@ function editQRCode(sid){
     <div id="qrAssignScanArea" style="display:none;margin-bottom:12px"></div>
     <div id="qrAssignFeedback" style="min-height:20px;font-size:0.78rem;margin-bottom:8px"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
-      ${s.qrCode?`<button onclick="clearQRCode('${sid}')" style="padding:7px 14px;background:transparent;color:var(--danger);border:1.5px solid var(--danger);border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">🗑 Borrar</button>`:'<div></div>'}
+      ${s.qrCode?`<button onclick="clearQRCode('${sid}','${g.id}')" style="padding:7px 14px;background:transparent;color:var(--danger);border:1.5px solid var(--danger);border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">🗑 Borrar</button>`:'<div></div>'}
       <div style="display:flex;gap:8px">
         <button onclick="document.getElementById('qrCodeModal').remove()" style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
-        <button onclick="saveQRCode('${sid}')" style="padding:8px 20px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">✅ Guardar</button>
+        <button onclick="saveQRCode('${sid}','${g.id}')" style="padding:8px 20px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">✅ Guardar</button>
       </div>
     </div>
   </div>`;
@@ -7746,8 +7639,9 @@ function regenerarQRCode(sid){
   if(inp) inp.value=genAlumnoId(usados);
 }
 
-function saveQRCode(sid){
-  const g=currentGroup();const s=g.students.find(x=>x.id===sid);if(!s)return;
+function saveQRCode(sid, gid){
+  const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
+  const s = g && g.students.find(x=>x.id===sid); if(!g || !s) return;
   const inp=document.getElementById('qrCodeInput');const code=inp?inp.value.trim():'';
 
   // Verificar duplicados GLOBALMENTE (en todos los grupos, cualquier trimestre)
@@ -7786,8 +7680,9 @@ function saveQRCode(sid){
   showToast(code?`✅ Código "${code}" asignado a ${s.name}${trimMsg}`:'QR eliminado','success');
 }
 
-function clearQRCode(sid){
-  const g=currentGroup();const s=g.students.find(x=>x.id===sid);
+function clearQRCode(sid, gid){
+  const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
+  const s = g && g.students.find(x=>x.id===sid);
   if(!s){document.getElementById('qrCodeModal').remove();return;}
   // Borrar de todas las instancias del mismo alumno en el mismo grupo
   let removed=0;
