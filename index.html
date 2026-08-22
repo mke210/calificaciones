@@ -1048,16 +1048,9 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 <div class="overlay" id="modalGroup">
   <div class="modal">
     <div class="modal-title">➕ Nuevo Grupo</div>
-    <div class="form-row"><label>Nombre del Grupo</label><input type="text" id="groupNameInput" placeholder="Ej: 3°A, Matemáticas 101..."></div>
+    <div class="form-row"><label>Nombre del Grupo</label><input type="text" id="groupNameInput" placeholder="Ej: 1°A, 2°B, 3°C..."></div>
     <div class="form-row"><label>Materia / Descripción</label><input type="text" id="groupSubjectInput" placeholder="Ej: Matemáticas, Ciencias..."></div>
-    <div class="form-row"><label>Trimestre</label>
-      <select id="groupTrimestreInput">
-        <option value="">— Sin especificar —</option>
-        <option value="1">1° Trimestre</option>
-        <option value="2">2° Trimestre</option>
-        <option value="3">3° Trimestre</option>
-      </select>
-    </div>
+    <p style="font-size:0.78rem;color:#888;margin-top:-4px">Se creará automáticamente en los 3 trimestres (1°, 2° y 3°), listo para capturar calificaciones en cualquiera de ellos.</p>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modalGroup')">Cancelar</button>
       <button class="btn btn-primary" onclick="addGroup()">Crear Grupo</button>
@@ -1582,18 +1575,23 @@ function _markClean() {
 // GROUPS
 function openAddGroup() {
   document.getElementById('groupNameInput').value = '';
-  document.getElementById('groupSubjectInput').value = '';
+  document.getElementById('groupSubjectInput').value = 'Informática';
   openModal('modalGroup');
   setTimeout(() => document.getElementById('groupNameInput').focus(), 100);
 }
 function addGroup() {
   const name = document.getElementById('groupNameInput').value.trim();
-  const subject = document.getElementById('groupSubjectInput').value.trim();
-  const trimestre = document.getElementById('groupTrimestreInput').value;
+  const subject = document.getElementById('groupSubjectInput').value.trim() || 'Informática';
   if (!name) { showToast('Ingresa un nombre', 'error'); return; }
-  const g = { id: Date.now().toString(), name, subject, trimestre, students: [], activities: [], grades: {}, conduct: {}, hwStatus: {} };
-  data.groups.push(g); autoSave(); closeModal('modalGroup'); renderSidebar(); selectGroup(g.id);
-  showToast('Grupo creado: ' + name, 'success');
+  if (data.groups.some(g => g.name === name)) { showToast('Ya existe un grupo con ese nombre', 'error'); return; }
+  let primerId = null;
+  ['1','2','3'].forEach(trimestre => {
+    const g = { id: Date.now().toString(36)+Math.random().toString(36).slice(2)+'_t'+trimestre, name, subject, trimestre, students: [], activities: [], grades: {}, conduct: {}, hwStatus: {} };
+    data.groups.push(g);
+    if (trimestre === '1') primerId = g.id;
+  });
+  autoSave(); closeModal('modalGroup'); renderSidebar(); selectGroup(primerId);
+  showToast(`Grupo "${name}" creado en los 3 trimestres`, 'success');
 }
 function openRenameGroup(id) {
   renamingGroupId = id;
@@ -1644,6 +1642,17 @@ function renderSidebar() {
   sections.forEach(sec => {
     const groups = data.groups.filter(g => (g.trimestre||'') === sec.key);
     if (!groups.length) return;
+
+    // Orden: primero por grado (1°, 2°, 3°), luego por letra de grupo A→I
+    // (si falta una letra simplemente se brinca a la siguiente, orden alfabético normal)
+    groups.sort((a, b) => {
+      const ga = _gradoFromGroup(a), gb = _gradoFromGroup(b);
+      const gaKey = ga === '?' ? '9' : ga, gbKey = gb === '?' ? '9' : gb;
+      if (gaKey !== gbKey) return gaKey.localeCompare(gbKey);
+      const la = _grupoFromGroupName(a.name) || 'ZZ', lb = _grupoFromGroupName(b.name) || 'ZZ';
+      if (la !== lb) return la.localeCompare(lb);
+      return a.name.localeCompare(b.name, 'es');
+    });
 
     // Check if any group in this section is active
     const hasActive = groups.some(g => g.id === currentGroupId);
