@@ -1241,6 +1241,15 @@ function doLogout() {
 // ════════════════════════════════════════════════════════════════════
 let currentGroupId = null;
 let currentTab = 'calificaciones';
+// Mostrar/ocultar la fila de tarjetas resumen (Alumnos, Actividades, Promedio
+// General, Mejor Promedio, Conducta Grave) para ganar espacio vertical y ver
+// más nombres de alumnos sin desplazar. Se recuerda entre sesiones.
+let statsRowVisible = (localStorage.getItem('regCalif_statsVisible') !== '0');
+function toggleStatsRow(){
+  statsRowVisible = !statsRowVisible;
+  try{ localStorage.setItem('regCalif_statsVisible', statsRowVisible ? '1' : '0'); }catch(e){}
+  renderMain();
+}
 let renamingGroupId = null;
 let pendingConfirm = null;
 let conductStudentId = null;
@@ -1720,19 +1729,20 @@ function _renderMainInner() {
     <div class="page-header">
       <div class="page-title">${g.name}</div>
       <div class="page-actions">
+        <button class="btn btn-secondary btn-sm" onclick="toggleStatsRow()">${statsRowVisible ? '📊 Ocultar resumen' : '📊 Mostrar resumen'}</button>
         <button class="btn btn-secondary btn-sm" onclick="openAddGroup()">+ Grupo</button>
         <button class="btn btn-primary btn-sm" onclick="addStudentRow()">+ Alumno</button>
         <button class="btn btn-blue btn-sm" onclick="addActivity()">+ Actividad</button>
         <button class="btn btn-success btn-sm" onclick="saveAll()">💾 Guardar</button>
       </div>
     </div>
-    <div class="stats-row">
+    ${statsRowVisible ? `<div class="stats-row">
       <div class="stat-card accent"><div class="stat-card-content"><div class="stat-label">Alumnos</div><div class="stat-value">${ts}</div><div class="stat-sub">en este grupo</div></div></div>
       <div class="stat-card gold"><div class="stat-card-content"><div class="stat-label">Actividades</div><div class="stat-value">${ta}</div><div class="stat-sub">registradas</div></div></div>
       <div class="stat-card green"><div class="stat-card-content"><div class="stat-label">Promedio General</div><div class="stat-value">${genAvg}</div><div class="stat-sub">del grupo</div></div></div>
       <div class="stat-card blue"><div class="stat-card-content"><div class="stat-label">Mejor Promedio</div><div class="stat-value" style="font-size:0.82rem;line-height:1.3">${bestS}</div><div class="stat-sub">alumno destacado</div></div></div>
       <div class="stat-card orange"><div class="stat-card-content"><div class="stat-label">Conducta Grave</div><div class="stat-value">${conductIssues}</div><div class="stat-sub">alumno${conductIssues!==1?'s':''} con reporte</div></div></div>
-    </div>
+    </div>` : ''}
     <div class="tabs">
       <button class="tab ${currentTab==='calificaciones'?'active':''}" onclick="switchTab('calificaciones')">📊 Calificaciones</button>
       <button class="tab ${currentTab==='alumnos'?'active':''}" onclick="switchTab('alumnos')">👨‍🎓 Alumnos</button>
