@@ -1750,6 +1750,7 @@ function _renderMainInner() {
       <button class="tab ${currentTab==='reporte_final'?'active':''}" onclick="switchTab('reporte_final')">🏆 Reporte Final</button>
       <button class="tab ${currentTab==='asistencia'?'active':''}" onclick="switchTab('asistencia')" style="color:${currentTab==='asistencia'?'var(--green)':''};border-bottom-color:${currentTab==='asistencia'?'var(--green)':' transparent'}">✅ Asistencia</button>
       <button class="tab ${currentTab==='informes'?'active':''}" onclick="switchTab('informes')" style="color:${currentTab==='informes'?'#7a5a00':''};border-bottom-color:${currentTab==='informes'?'#d4a843':' transparent'}">🖨️ Informes Finales</button>
+      <button class="tab ${currentTab==='concentrados'?'active':''}" onclick="switchTab('concentrados')" style="color:${currentTab==='concentrados'?'#1a6640':''};border-bottom-color:${currentTab==='concentrados'?'#1a6640':' transparent'}">🗂️ Concentrados</button>
       <button class="tab ${currentTab==='ajustes'?'active':''}" onclick="switchTab('ajustes')">⚙️ Ajustes</button>
     </div>
     <div id="tabContent"></div>`;
@@ -1766,6 +1767,7 @@ function renderTab() {
   else if (currentTab==='reporte_final') renderReporteFinal(c);
   else if (currentTab==='asistencia') renderAsistenciaTab(c);
   else if (currentTab==='informes') renderInformesFinalesTab(c);
+  else if (currentTab==='concentrados') renderConcentradosTab(c);
   else if (currentTab==='ajustes') renderSettingsTab(c);
 }
 
@@ -4430,6 +4432,10 @@ function _infDefaultConfig() {
     turno: 'MATUTINO',
     docente: '',
     escuela: '',
+    asignatura: '',
+    admvo: '',
+    supervisionZona: '',
+    claveControl: '',
   };
 }
 
@@ -5032,6 +5038,484 @@ async function _exportarInformesXLSX() {
     showToast('⚠️ Error al generar el archivo Excel: ' + e.message, 'error');
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PESTAÑA "CONCENTRADOS" — Concentrado de Calificaciones (formato IEEPO)
+   Genera un .xlsx con hojas por grado/grupo, replicando exactamente la
+   plantilla oficial: título institucional, tabla de 3 periodos + promedio +
+   inasistencias + conducta, y bloque de estadísticas por grupo.
+════════════════════════════════════════════════════════════════════════ */
+
+const GRADO_PALABRA_CONC = { '1':'PRIMERO', '2':'SEGUNDO', '3':'TERCERO', '4':'CUARTO', '5':'QUINTO', '6':'SEXTO' };
+const CONC_LETRAS = ['A','B','C','D','E','F','G','H','I'];
+
+// Combinación por defecto que describiste: pares que comparten hoja + la
+// letra que va sola en otra hoja, para cada grado.
+function _concCombosDefault() {
+  return [
+    { grado:'1', par:['A','B'], solo:'C' },
+    { grado:'1', par:['G','H'], solo:'I' },
+    { grado:'2', par:['A','B'], solo:'C' },
+    { grado:'2', par:['G','H'], solo:'I' },
+    { grado:'3', par:['A','B'], solo:'C' },
+    { grado:'3', par:['D','E'], solo:'F' },
+    { grado:'3', par:['G','H'], solo:'I' },
+  ];
+}
+
+function _concGetCombos() {
+  if (!data.concentradoCombos || !Array.isArray(data.concentradoCombos) || !data.concentradoCombos.length) {
+    data.concentradoCombos = _concCombosDefault();
+  }
+  return data.concentradoCombos;
+}
+
+function _concSetCombo(idx, campo, valor) {
+  const combos = _concGetCombos();
+  if (!combos[idx]) return;
+  if (campo === 'par1') combos[idx].par[0] = valor;
+  else if (campo === 'par2') combos[idx].par[1] = valor;
+  else combos[idx][campo] = valor;
+  autoSave();
+  renderTab();
+}
+
+function _concAgregarCombo() {
+  const combos = _concGetCombos();
+  combos.push({ grado:'1', par:['A','B'], solo:'C' });
+  autoSave();
+  renderTab();
+}
+
+function _concQuitarCombo(idx) {
+  const combos = _concGetCombos();
+  combos.splice(idx, 1);
+  autoSave();
+  renderTab();
+}
+
+// Config del encabezado — reutiliza _infGetConfig (Informes Finales) y le
+// agrega los campos propios del Concentrado (asignatura, admvo, etc.)
+function _concGetConfig() { return _infGetConfig(); }
+
+// Normaliza un nombre para usarlo como llave (igual criterio que el resto
+// de la app: sin acentos, mayúsculas, sin espacios extra).
+function _concKey(nombre) {
+  return String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+}
+
+function _concGetExtra(nombre) {
+  if (!data.concentradoExtra) data.concentradoExtra = {};
+  const k = _concKey(nombre);
+  if (!data.concentradoExtra[k]) data.concentradoExtra[k] = { i1:0, i2:0, i3:0, c1:'B', c2:'B', c3:'B' };
+  return data.concentradoExtra[k];
+}
+
+function _concSetExtra(nombre, campo, valor) {
+  const e = _concGetExtra(nombre);
+  e[campo] = valor;
+  autoSave();
+}
+
+// Alumnos de un grado que pertenecen a alguna de las letras dadas, con su
+// promedio de cada trimestre (mismo criterio que usa Reporte Final / Informes).
+function _concAlumnosDeLetra(grado, letra) {
+  const todos = data.groups.map(g => ({ g, grado: _gradoFromGroup(g), trimestre: g.trimestre || '' }));
+  const enGrado = todos.filter(t => t.grado === grado);
+
+  function avgEnTrimestre(nombre, t) {
+    const rels = enGrado.filter(x => x.trimestre === t);
+    for (const rel of rels) {
+      const stu = rel.g.students.find(s => s.name === nombre && !s.inactive);
+      if (stu) { const a = calcAvg(rel.g, stu.id); if (a !== null) return a; }
+    }
+    return null;
+  }
+
+  const vistos = new Set();
+  const alumnos = [];
+  ['1','2','3'].forEach(t => {
+    enGrado.filter(x => x.trimestre === t).forEach(rel => {
+      rel.g.students.filter(s => !s.inactive && _alumnoGrupo(s, rel.g) === letra).forEach(s => {
+        if (vistos.has(s.name)) return;
+        vistos.add(s.name);
+        alumnos.push({
+          name: s.name,
+          sexo: _alumnoSexo(s),
+          p1: avgEnTrimestre(s.name, '1'),
+          p2: avgEnTrimestre(s.name, '2'),
+          p3: avgEnTrimestre(s.name, '3'),
+        });
+      });
+    });
+  });
+  alumnos.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  return alumnos;
+}
+
+// Letras que realmente tienen alumnos registrados en ese grado (para el
+// texto de ayuda "detectado: A, B, C…" en la interfaz).
+function _concLetrasDetectadas(grado) {
+  const set = new Set();
+  data.groups.forEach(g => {
+    if (_gradoFromGroup(g) !== grado) return;
+    g.students.forEach(s => { if (!s.inactive) { const l = _alumnoGrupo(s, g); if (l) set.add(l); } });
+  });
+  return [...set].sort();
+}
+
+// ── Render de la pestaña ─────────────────────────────────────────────────
+function renderConcentradosTab(container) {
+  if (!data.groups.length) {
+    container.innerHTML = `<div class="empty"><div class="icon">🗂️</div><p>No hay grupos registrados.</p></div>`;
+    return;
+  }
+  const cfg = _concGetConfig();
+  const combos = _concGetCombos();
+
+  if (!_concUI.hojaSel) _concUI.hojaSel = null;
+
+  const hojasDisponibles = [];
+  combos.forEach((c, idx) => {
+    hojasDisponibles.push({ id: idx + '_par', label: `${c.grado}° "${c.par[0]} Y ${c.par[1]}"`, grado: c.grado, letras: c.par });
+    hojasDisponibles.push({ id: idx + '_solo', label: `${c.grado}° "${c.solo}"`, grado: c.grado, letras: [c.solo] });
+  });
+
+  let html = `
+  <style>
+    .conc-panel { background:white;border:1.5px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:14px; }
+    .conc-panel h3 { font-family:'DM Serif Display',serif;font-size:1.05rem;margin-bottom:12px;display:flex;align-items:center;gap:8px; }
+    .conc-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px; }
+    .conc-field label { display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:5px; }
+    .conc-field input { width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.86rem;outline:none;box-sizing:border-box; }
+    .conc-field input:focus { border-color:var(--accent); }
+    @media (max-width:900px) { .conc-grid { grid-template-columns:repeat(2,1fr); } }
+    @media (max-width:600px) { .conc-grid { grid-template-columns:1fr; } }
+    .conc-combo-row { display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 10px;border:1.5px solid var(--cream);border-radius:8px;margin-bottom:8px;background:#faf8f4; }
+    .conc-combo-row select { padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.82rem; }
+    .conc-print-btn { padding:11px 28px;background:var(--ink);color:#d4a843;border:none;border-radius:9px;font-family:inherit;font-size:0.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px; }
+    .conc-print-btn:hover { background:#2a2a4e; }
+    .conc-table { width:100%;border-collapse:collapse;font-size:0.82rem; }
+    .conc-table th { background:#f5f0e8;padding:7px 8px;font-size:0.64rem;text-transform:uppercase;color:#888;font-weight:700;text-align:center; }
+    .conc-table td { padding:5px 6px;text-align:center;border-bottom:1px solid var(--cream); }
+    .conc-table td:nth-child(2) { text-align:left;font-weight:500; }
+    .conc-table input[type=number] { width:52px;padding:4px;border:1.5px solid var(--border);border-radius:5px;text-align:center;font-family:inherit; }
+    .conc-table select.conducta-sel { padding:4px 6px;border-radius:5px;border:1.5px solid var(--border);font-family:inherit;font-weight:700; }
+    .conc-table select.conducta-sel.mal { color:#c8422a;border-color:#c8422a; }
+  </style>
+
+  <div class="conc-panel" style="background:linear-gradient(135deg,#f5f0e8,#efe6d8);border-color:#d4a843">
+    <h3>🗂️ Concentrado de Calificaciones (formato oficial)</h3>
+    <p style="font-size:0.85rem;color:#7a5a00;line-height:1.5">
+      Genera el Excel oficial "Concentrado de Calificaciones" con una hoja por combinación de grupos.
+      Los 3 periodos, el promedio final y las estadísticas (hombres/mujeres/aprobados/reprobados) se calculan
+      automáticamente con tus calificaciones. Las inasistencias inician en 0 y la conducta en "B" — puedes
+      editarlas abajo antes de exportar.
+    </p>
+  </div>
+
+  <div class="conc-panel">
+    <h3>📋 Datos del encabezado</h3>
+    <div class="conc-grid">
+      <div class="conc-field"><label>Instituto</label><input value="${escHtml(cfg.instituto)}" onchange="_infSetConfig('instituto',this.value)"></div>
+      <div class="conc-field"><label>Unidad</label><input value="${escHtml(cfg.unidad)}" onchange="_infSetConfig('unidad',this.value)"></div>
+      <div class="conc-field"><label>Supervisión / Zona</label><input value="${escHtml(cfg.supervisionZona||'')}" placeholder='Ej. SUPERVISIÓN ESCOLAR ZONA 014' onchange="_infSetConfig('supervisionZona',this.value)"></div>
+      <div class="conc-field"><label>Escuela</label><input value="${escHtml(cfg.escuela)}" placeholder="Nombre de la escuela" onchange="_infSetConfig('escuela',this.value)"></div>
+      <div class="conc-field"><label>Clave de control</label><input value="${escHtml(cfg.claveControl||'')}" placeholder="Ej. ES-372-126" onchange="_infSetConfig('claveControl',this.value)"></div>
+      <div class="conc-field"><label>CCT</label><input value="${escHtml(cfg.cct)}" placeholder="Ej. 20DES0139O" onchange="_infSetConfig('cct',this.value)"></div>
+      <div class="conc-field"><label>Ciclo escolar</label><input value="${escHtml(cfg.cicloEscolar)}" placeholder="Ej. 2025-2026" onchange="_infSetConfig('cicloEscolar',this.value)"></div>
+      <div class="conc-field"><label>Nombre del docente</label><input value="${escHtml(cfg.docente)}" onchange="_infSetConfig('docente',this.value)"></div>
+      <div class="conc-field"><label>Asignatura</label><input value="${escHtml(cfg.asignatura||'')}" placeholder="Ej. INFORMÁTICA" onchange="_infSetConfig('asignatura',this.value)"></div>
+      <div class="conc-field"><label>Turno</label><input value="${escHtml(cfg.turno)}" onchange="_infSetConfig('turno',this.value)"></div>
+      <div class="conc-field"><label>Nombre de Admvo.</label><input value="${escHtml(cfg.admvo||'')}" placeholder="Nombre de administración" onchange="_infSetConfig('admvo',this.value)"></div>
+    </div>
+  </div>
+
+  <div class="conc-panel">
+    <h3>🔀 Grupos que van juntos por hoja</h3>
+    <p style="font-size:0.78rem;color:#888;margin-bottom:10px">
+      Cada fila genera <strong>2 hojas</strong>: una con el par de grupos juntos y otra con el grupo que va solo.
+      Elige las letras con los menús desplegables — se detectaron estos grupos con alumnos registrados: 
+      ${['1','2','3'].map(gr => `<strong>${gr}°</strong>: ${_concLetrasDetectadas(gr).join(', ') || '—'}`).join(' · ')}
+    </p>
+    ${combos.map((c, idx) => `
+      <div class="conc-combo-row">
+        <select onchange="_concSetCombo(${idx},'grado',this.value)">
+          ${['1','2','3','4','5','6'].map(gr => `<option value="${gr}" ${c.grado===gr?'selected':''}>${gr}°</option>`).join('')}
+        </select>
+        <span style="font-size:0.8rem;color:#888">Van juntos:</span>
+        <select onchange="_concSetCombo(${idx},'par1',this.value)">
+          ${CONC_LETRAS.map(l => `<option value="${l}" ${c.par[0]===l?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <span style="font-size:0.8rem;color:#888">y</span>
+        <select onchange="_concSetCombo(${idx},'par2',this.value)">
+          ${CONC_LETRAS.map(l => `<option value="${l}" ${c.par[1]===l?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <span style="font-size:0.8rem;color:#888">· Va solo:</span>
+        <select onchange="_concSetCombo(${idx},'solo',this.value)">
+          ${CONC_LETRAS.map(l => `<option value="${l}" ${c.solo===l?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <button onclick="_concQuitarCombo(${idx})" style="margin-left:auto;padding:5px 10px;background:#f8d7da;color:#721c24;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">✕ Quitar</button>
+      </div>`).join('')}
+    <button onclick="_concAgregarCombo()" style="margin-top:4px;padding:8px 16px;background:var(--cream);border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">+ Agregar combinación</button>
+  </div>
+
+  <div class="conc-panel">
+    <h3>✏️ Editar inasistencias y conducta</h3>
+    <div class="conc-field" style="max-width:340px;margin-bottom:12px">
+      <label>Hoja a editar</label>
+      <select onchange="_concUI.hojaSel=this.value;renderTab()">
+        <option value="">— Elige una hoja —</option>
+        ${hojasDisponibles.map(h => `<option value="${h.id}" ${_concUI.hojaSel===h.id?'selected':''}>${h.label}</option>`).join('')}
+      </select>
+    </div>
+    ${_concUI.hojaSel ? _concRenderEditorHoja(hojasDisponibles.find(h => h.id === _concUI.hojaSel)) : `<p style="color:#bbb;text-align:center;padding:14px">Elige una hoja arriba para editar inasistencias y conducta.</p>`}
+  </div>
+
+  <div style="display:flex;justify-content:center;gap:12px;margin:20px 0 8px;flex-wrap:wrap">
+    <button class="conc-print-btn" style="background:#1a6640;color:white" onclick="_generarConcentradoXLSX()">
+      📊 Generar Excel — Concentrado (${hojasDisponibles.length} hojas)
+    </button>
+  </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+let _concUI = { hojaSel: null };
+
+function _concRenderEditorHoja(hoja) {
+  if (!hoja) return '';
+  let filas = '';
+  hoja.letras.forEach(letra => {
+    const alumnos = _concAlumnosDeLetra(hoja.grado, letra);
+    if (!alumnos.length) return;
+    filas += `<tr><td colspan="8" style="text-align:left;background:#f0ece0;font-weight:700;padding:6px 8px">${GRADO_PALABRA_CONC[hoja.grado]} "${letra}"</td></tr>`;
+    filas += alumnos.map(a => {
+      const e = _concGetExtra(a.name);
+      const k = escHtml(a.name).replace(/'/g, "\\'");
+      return `<tr>
+        <td></td>
+        <td>${escHtml(a.name)}</td>
+        <td><input type="number" min="0" value="${e.i1}" onchange="_concSetExtra('${k}','i1',parseInt(this.value)||0)"></td>
+        <td><input type="number" min="0" value="${e.i2}" onchange="_concSetExtra('${k}','i2',parseInt(this.value)||0)"></td>
+        <td><input type="number" min="0" value="${e.i3}" onchange="_concSetExtra('${k}','i3',parseInt(this.value)||0)"></td>
+        <td><select class="conducta-sel ${e.c1==='M'?'mal':''}" onchange="_concSetExtra('${k}','c1',this.value);renderTab()"><option ${e.c1==='B'?'selected':''}>B</option><option ${e.c1==='M'?'selected':''}>M</option></select></td>
+        <td><select class="conducta-sel ${e.c2==='M'?'mal':''}" onchange="_concSetExtra('${k}','c2',this.value);renderTab()"><option ${e.c2==='B'?'selected':''}>B</option><option ${e.c2==='M'?'selected':''}>M</option></select></td>
+        <td><select class="conducta-sel ${e.c3==='M'?'mal':''}" onchange="_concSetExtra('${k}','c3',this.value);renderTab()"><option ${e.c3==='B'?'selected':''}>B</option><option ${e.c3==='M'?'selected':''}>M</option></select></td>
+      </tr>`;
+    }).join('');
+  });
+  if (!filas) return `<p style="color:#bbb;text-align:center;padding:14px">No hay alumnos registrados en esta combinación todavía.</p>`;
+  return `<div style="overflow-x:auto"><table class="conc-table">
+    <thead><tr><th>N/P</th><th style="text-align:left">Alumno</th><th>Inasist. 1°</th><th>Inasist. 2°</th><th>Inasist. 3°</th><th>Conducta 1°</th><th>Conducta 2°</th><th>Conducta 3°</th></tr></thead>
+    <tbody>${filas}</tbody>
+  </table></div>`;
+}
+
+// ── Generación del Excel ─────────────────────────────────────────────────
+async function _generarConcentradoXLSX() {
+  const cfg = _concGetConfig();
+  const combos = _concGetCombos();
+  if (!combos.length) { showToast('Agrega al menos una combinación de grupos', 'error'); return; }
+
+  showToast('📊 Generando Concentrado de Calificaciones…', '');
+  try {
+    await _cargarExcelJS();
+  } catch (e) {
+    showToast('⚠️ No se pudo cargar la librería Excel — revisa tu conexión a internet', 'error');
+    return;
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Registro de Calificaciones';
+  wb.created = new Date();
+
+  const THIN = { style: 'thin' };
+  const MED = { style: 'medium' };
+  const BORDER_ALL = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+  const VERDE = 'FF92D050';
+  const nombresUsados = new Set();
+
+  function nombreHojaUnico(base) {
+    let n = base.slice(0, 31), i = 2;
+    while (nombresUsados.has(n)) { n = (base.slice(0, 28) + ' ' + i).slice(0, 31); i++; }
+    nombresUsados.add(n);
+    return n;
+  }
+
+  function construirHojaConcentrado(nombreHoja, grado, letras) {
+    const ws = wb.addWorksheet(nombreHojaUnico(nombreHoja), {
+      pageSetup: { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left:0.5,right:0.5,top:0.6,bottom:0.6,header:0.3,footer:0.3 } }
+    });
+    ws.columns = [
+      { width: 5 }, { width: 32 }, { width: 6 }, { width: 5 }, { width: 6 }, { width: 5 }, { width: 6 },
+      { width: 8 }, { width: 5 }, { width: 5 }, { width: 5 }, { width: 5 }, { width: 5 }, { width: 5 },
+    ];
+    const N = 14; // columnas A..N
+
+    function merge(r1, c1, r2, c2, val, opts) {
+      ws.mergeCells(r1, c1, r2, c2);
+      const cell = ws.getCell(r1, c1);
+      if (val !== undefined) cell.value = val;
+      cell.font = Object.assign({ name: 'Arial', size: 9 }, (opts && opts.font) || {});
+      cell.alignment = Object.assign({ horizontal: 'center', vertical: 'middle', wrapText: true }, (opts && opts.align) || {});
+      if (opts && opts.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opts.fill } };
+      if (opts && opts.border !== false) {
+        for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) ws.getCell(r, c).border = (opts && opts.border) || BORDER_ALL;
+      }
+      return cell;
+    }
+
+    // ── Encabezado institucional (filas 1-6) ──
+    merge(1, 1, 1, N, cfg.instituto, { font: { bold: true, size: 11 }, border: false });
+    merge(2, 1, 2, N, cfg.unidad, { font: { bold: true, size: 10 }, border: false });
+    merge(3, 1, 3, N, cfg.supervisionZona || '', { font: { bold: true, size: 10 }, border: false });
+    merge(4, 1, 4, N, cfg.escuela, { font: { bold: true, size: 10 }, border: false });
+    merge(5, 1, 5, N, [cfg.claveControl, cfg.cct].filter(Boolean).join('          '), { font: { bold: true, size: 9 }, border: false });
+    merge(6, 1, 6, N, 'CICLO ESCOLAR: ' + (cfg.cicloEscolar || ''), { font: { bold: true, size: 9 }, border: false });
+
+    // ── Título ──
+    merge(7, 1, 7, N, 'CONCENTRADO DE CALIFICACIONES', { font: { bold: true, size: 13 }, border: false });
+
+    // ── Docente / asignatura / turno / grado / admvo ──
+    const letrasTxt = letras.join(' Y ');
+    merge(8, 1, 8, 6, 'PROFR.:          ' + (cfg.docente || ''), { align: { horizontal: 'left' }, font: { bold: true, size: 9 }, border: false });
+    merge(8, 7, 8, N, 'ASIGNATURA:          ' + (cfg.asignatura || ''), { align: { horizontal: 'left' }, font: { bold: true, size: 9 }, border: false });
+    merge(9, 1, 9, 2, 'TURNO:         ' + (cfg.turno || ''), { align: { horizontal: 'left' }, font: { bold: true, size: 9 }, border: false });
+    merge(9, 3, 9, 6, `GRADO: ${GRADO_PALABRA_CONC[grado]} "${letrasTxt}"`, { align: { horizontal: 'left' }, font: { bold: true, size: 9 }, border: false });
+    merge(9, 8, 9, N, ' ADMVO.: ' + (cfg.admvo || ''), { align: { horizontal: 'left' }, font: { bold: true, size: 9 }, border: false });
+
+    // ── Encabezados de la tabla (filas 10-12) ──
+    merge(10, 1, 12, 1, 'N/P', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(10, 2, 12, 2, 'NOMBRE COMPLETO DEL ALUMNO', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(10, 3, 10, 7, 'PERIODOS DE EVALUACION', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(10, 8, 12, 8, 'PROM.\nFINAL', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(10, 9, 10, 11, 'INASISTENCIAS', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(10, 12, 10, 14, 'CONDUCTA', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(11, 3, 11, 4, '1°', { fill: VERDE, font: { bold: true, size: 8 } });
+    merge(11, 5, 11, 6, '2°', { fill: VERDE, font: { bold: true, size: 8 } });
+    merge(11, 7, 12, 7, '3°', { fill: VERDE, font: { bold: true, size: 8 } });
+    merge(12, 4, 12, 4, 'ER', { fill: VERDE, font: { bold: true, size: 9 } });
+    merge(12, 6, 12, 6, 'ER', { fill: VERDE, font: { bold: true, size: 9 } });
+    ['1°', '2°', '3°'].forEach((t, i) => merge(11, 9 + i, 12, 9 + i, t, { fill: VERDE, font: { bold: true, size: 8 } }));
+    ['1°', '2°', '3°'].forEach((t, i) => merge(11, 12 + i, 12, 12 + i, t, { fill: VERDE, font: { bold: true, size: 8 } }));
+
+    let cursor = 13;
+    letras.forEach(letra => {
+      const alumnos = _concAlumnosDeLetra(grado, letra);
+      const nAl = Math.max(alumnos.length, 1);
+
+      // Título del grupo
+      merge(cursor, 1, cursor, N, `${GRADO_PALABRA_CONC[grado]} "${letra}"`, { fill: VERDE, font: { bold: true, size: 10 } });
+      const tituloRow = cursor;
+      cursor++;
+
+      const startRow = cursor;
+      for (let i = 0; i < nAl; i++) {
+        const al = alumnos[i];
+        const r = cursor;
+        const row = ws.getRow(r);
+        row.getCell(1).value = i + 1;
+        row.getCell(2).value = al ? al.name : '';
+        row.getCell(3).value = (al && al.p1 !== null && al.p1 !== undefined) ? Math.round(al.p1) : null;
+        row.getCell(5).value = (al && al.p2 !== null && al.p2 !== undefined) ? Math.round(al.p2) : null;
+        row.getCell(7).value = (al && al.p3 !== null && al.p3 !== undefined) ? Math.round(al.p3) : null;
+        const hCell = row.getCell(8);
+        hCell.value = { formula: `AVERAGE(C${r},E${r},G${r})` };
+        hCell.numFmt = '0.0';
+        const extra = al ? _concGetExtra(al.name) : { i1:0, i2:0, i3:0, c1:'B', c2:'B', c3:'B' };
+        row.getCell(9).value = al ? extra.i1 : null;
+        row.getCell(10).value = al ? extra.i2 : null;
+        row.getCell(11).value = al ? extra.i3 : null;
+        [12, 13, 14].forEach((col, idx) => {
+          const cCell = row.getCell(col);
+          const val = al ? extra['c' + (idx + 1)] : null;
+          cCell.value = val;
+          if (val === 'M') cCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFC8422A' } };
+        });
+        for (let c = 1; c <= N; c++) {
+          const cell = row.getCell(c);
+          cell.border = BORDER_ALL;
+          if (!cell.font) cell.font = { name: 'Arial', size: 9 };
+          cell.alignment = { horizontal: c === 2 ? 'left' : 'center', vertical: 'middle' };
+        }
+        cursor++;
+      }
+      const endRow = cursor - 1;
+
+      // ── Bloque de estadísticas ──
+      const hombres = alumnos.filter(a => a.sexo === 'M').length;
+      const mujeres = alumnos.filter(a => a.sexo === 'F').length;
+      const rH = cursor, rM = cursor + 1, rT = cursor + 2, rAp = cursor + 3, rRe = cursor + 4,
+            rPA = cursor + 5, rPR = cursor + 6, rSu = cursor + 7, rPr = cursor + 8;
+
+      const statRows = [
+        ['HOMBRES', () => hombres],
+        ['MUJERES', () => mujeres],
+        ['TOTAL', (col) => ({ formula: `${col}${rH}+${col}${rM}` })],
+        ['APROBADOS', (col) => ({ formula: `COUNTIF(${col}${startRow}:${col}${endRow},">=6")` })],
+        ['REPROBADOS', (col) => ({ formula: `COUNTIF(${col}${startRow}:${col}${endRow},"<6")` })],
+        ['% APROBADOS', (col) => ({ formula: `(${col}${rAp}/${col}${rT})*100` })],
+        ['% REPROBADOS', (col) => ({ formula: `(${col}${rRe}/${col}${rT})*100` })],
+        ['SUMA', (col) => ({ formula: `SUM(${col}${startRow}:${col}${endRow})` })],
+        ['PROMEDIO', (col) => ({ formula: `AVERAGE(${col}${startRow}:${col}${endRow})` })],
+      ];
+      statRows.forEach(([label, fn], i) => {
+        const r = cursor + i;
+        merge(r, 1, r, 2, label, { align: { horizontal: 'right' }, font: { bold: true, size: 8 }, border: BORDER_ALL, fill: null });
+        ['C', 'E', 'G'].forEach(col => {
+          const cell = ws.getCell(`${col}${r}`);
+          cell.value = fn(col);
+          cell.border = BORDER_ALL;
+          cell.font = { name: 'Arial', size: 8, bold: true };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (label.startsWith('%')) cell.numFmt = '0.0';
+          if (label === 'PROMEDIO') cell.numFmt = '0.0';
+        });
+      });
+      cursor += 9;
+    });
+
+    // ── Firmas ──
+    const rFirmaTitulo = cursor + 1;
+    merge(rFirmaTitulo, 1, rFirmaTitulo, N, 'FIRMAS DEL PROFESOR', { font: { bold: true, size: 11 }, border: false });
+    const rTrim = rFirmaTitulo + 1;
+    merge(rTrim, 2, rTrim, 2, '1er. TRIMESTRE', { font: { bold: true, size: 9 }, border: false });
+    merge(rTrim, 3, rTrim, 7, '2o. TRIMESTRE', { font: { bold: true, size: 9 }, border: false });
+    merge(rTrim, 8, rTrim, N, '3er. TRIMESTRE', { font: { bold: true, size: 9 }, border: false });
+    const rFirma1 = rTrim + 1, rFirma2 = rTrim + 2;
+    merge(rFirma1, 2, rFirma2, 2, '', { border: { bottom: THIN }, fill: null });
+    merge(rFirma1, 3, rFirma2, 7, '', { border: { bottom: THIN }, fill: null });
+    merge(rFirma1, 8, rFirma2, N, '', { border: { bottom: THIN }, fill: null });
+
+    return ws;
+  }
+
+  combos.forEach(c => {
+    construirHojaConcentrado(`${c.grado}° ${c.par[0]} Y ${c.par[1]}`, c.grado, c.par);
+    construirHojaConcentrado(`${c.grado}° ${c.solo}`, c.grado, [c.solo]);
+  });
+
+  try {
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cicloSafe = (cfg.cicloEscolar || 'ciclo').replace(/[^\w-]/g, '_');
+    a.download = `Concentrado_de_Calificaciones_${cicloSafe}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('📊 Concentrado de Calificaciones descargado correctamente', 'success');
+  } catch (e) {
+    console.error('[Concentrados] Error al generar xlsx:', e);
+    showToast('⚠️ Error al generar el archivo Excel: ' + e.message, 'error');
+  }
+}
+
 
 function renderSettingsTab(container) {
   container.innerHTML = `
