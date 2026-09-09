@@ -975,6 +975,12 @@ var QRCode;
   .busc-empty{padding:14px;text-align:center;font-size:.76rem;color:#bbb}
   @keyframes buscFlashRow{0%{background:#fff3a0}70%{background:#fff3a0}100%{background:transparent}}
   .busc-flash{animation:buscFlashRow 1.8s ease}
+  @keyframes buscFlashName{
+    0%{background:#ffe066;box-shadow:0 0 0 4px #ffe066}
+    65%{background:#ffe066;box-shadow:0 0 0 4px #ffe066}
+    100%{background:transparent;box-shadow:0 0 0 4px transparent}
+  }
+  .busc-flash-name{animation:buscFlashName 2s ease;border-radius:5px}
 </style>
 
 <script>
@@ -1826,7 +1832,7 @@ function renderGradesTab(container) {
     const incidents = cData.incidents || [];
     const rowStyle = inactive ? 'opacity:0.42;background:#f8f6f2;' : '';
     const nameStyle = inactive ? 'text-decoration:line-through;color:#aaa;' : '';
-    html += `<tr id="stuRow_${s.id}" style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}</td>`;
+    html += `<tr id="stuRow_${s.id}" style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span id="stuName_${s.id}" class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}</td>`;
     g.activities.forEach(a => {
       const key = s.id+'_'+a.id;
       const val = g.grades[key]!==undefined ? g.grades[key] : '';
@@ -9981,11 +9987,13 @@ function buscIrAAlumno(sid){
   buscCollapse();
   setTimeout(() => {
     const row = document.getElementById('stuRow_' + sid);
-    if(!row) return;
-    row.scrollIntoView({ behavior:'smooth', block:'center' });
-    row.classList.remove('busc-flash');
-    void row.offsetWidth; // reinicia la animación aunque se repita el mismo alumno
-    row.classList.add('busc-flash');
+    if(row) row.scrollIntoView({ behavior:'smooth', block:'center' });
+    const nombre = document.getElementById('stuName_' + sid);
+    if(nombre){
+      nombre.classList.remove('busc-flash-name');
+      void nombre.offsetWidth; // reinicia la animación aunque se repita el mismo alumno
+      nombre.classList.add('busc-flash-name');
+    }
   }, 150);
 }
 
