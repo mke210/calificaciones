@@ -950,6 +950,31 @@ var QRCode;
   .ia-toggle .ia-tk-bg{position:absolute;inset:0;border-radius:24px;transition:.2s;cursor:pointer}
   .ia-toggle .ia-tk-dot{position:absolute;top:3px;width:18px;height:18px;background:white;border-radius:50%;transition:.2s;pointer-events:none}
   #iaBubble .ia-avatar-img, .ia-head .ia-avatar-img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;background:white}
+
+  /* 🔍 Buscador flotante de alumnos */
+  #buscWidget{position:fixed;left:24px;bottom:24px;z-index:7900;user-select:none;display:none}
+  #buscWidget.busc-active{display:block}
+  #buscBubble{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#2a7a9e 0%,#4fa3c9 100%);box-shadow:0 6px 18px rgba(42,122,158,0.4);display:flex;align-items:center;justify-content:center;font-size:1.25rem;cursor:grab;color:white;transition:transform .15s}
+  #buscBubble:hover{transform:scale(1.08)}
+  #buscBubble:active{cursor:grabbing}
+  #buscBubble.busc-gone{display:none}
+  #buscPanel{display:none;width:250px;max-width:80vw;background:white;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,0.26);border:1.5px solid var(--border);overflow:hidden}
+  #buscPanel.busc-show{display:block}
+  .busc-row{display:flex;align-items:center;gap:5px;padding:8px;background:linear-gradient(135deg,#2a7a9e 0%,#4fa3c9 100%)}
+  .busc-row input{flex:1;min-width:0;border:none;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.83rem;outline:none;background:white;transition:box-shadow .15s,background-color .15s}
+  .busc-row input.busc-found{box-shadow:0 0 0 3px rgba(60,180,100,.55);background:#eefff3}
+  .busc-row input.busc-notfound{box-shadow:0 0 0 3px rgba(220,80,60,.45);background:#fff4f2}
+  .busc-close{width:27px;height:27px;border-radius:7px;border:none;background:rgba(255,255,255,.2);color:white;cursor:pointer;font-size:.82rem;flex-shrink:0}
+  .busc-close:hover{background:rgba(255,255,255,.35)}
+  .busc-results{max-height:230px;overflow-y:auto;background:var(--paper)}
+  .busc-item{padding:8px 12px;font-size:.8rem;cursor:pointer;border-bottom:1px solid var(--cream)}
+  .busc-item:last-child{border-bottom:none}
+  .busc-item:hover{background:var(--cream)}
+  .busc-item-name{font-weight:600;color:var(--ink);display:block}
+  .busc-item-meta{font-size:.66rem;color:#999;display:block;margin-top:1px}
+  .busc-empty{padding:14px;text-align:center;font-size:.76rem;color:#bbb}
+  @keyframes buscFlashRow{0%{background:#fff3a0}70%{background:#fff3a0}100%{background:transparent}}
+  .busc-flash{animation:buscFlashRow 1.8s ease}
 </style>
 
 <script>
@@ -1039,6 +1064,18 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
       <input type="text" id="iaInput" placeholder="Escribe o presiona 🎤…" onkeydown="if(event.key==='Enter')iaSend()">
       <button class="ia-send" onclick="iaSend()" title="Enviar">➤</button>
     </div>
+  </div>
+</div>
+
+<!-- 🔍 Buscador flotante de alumnos (pestaña Calificaciones) -->
+<div id="buscWidget">
+  <div id="buscBubble" onmousedown="buscStartDrag(event)" ontouchstart="buscStartDrag(event)" onclick="buscToggle(event)" title="Buscar alumno">🔍</div>
+  <div id="buscPanel">
+    <div class="busc-row" id="buscHead">
+      <input type="text" id="buscInput" placeholder="Nombre, apellido o código…" oninput="buscOnInput()" onkeydown="if(event.key==='Escape')buscCollapse()" autocomplete="off">
+      <button class="busc-close" onclick="buscCollapse()" title="Cerrar">✕</button>
+    </div>
+    <div id="buscResults" class="busc-results"></div>
   </div>
 </div>
 
@@ -1765,6 +1802,7 @@ function renderTab() {
   else if (currentTab==='informes') renderInformesFinalesTab(c);
   else if (currentTab==='concentrados') renderConcentradosTab(c);
   else if (currentTab==='ajustes') renderSettingsTab(c);
+  if (typeof _buscActualizarVisibilidad === 'function') _buscActualizarVisibilidad();
 }
 
 // ---- GRADES TAB ----
@@ -1788,7 +1826,7 @@ function renderGradesTab(container) {
     const incidents = cData.incidents || [];
     const rowStyle = inactive ? 'opacity:0.42;background:#f8f6f2;' : '';
     const nameStyle = inactive ? 'text-decoration:line-through;color:#aaa;' : '';
-    html += `<tr style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}</td>`;
+    html += `<tr id="stuRow_${s.id}" style="${rowStyle}"><td style="width:36px;min-width:36px;max-width:36px;text-align:center;padding:4px 2px;font-size:0.82rem;font-weight:700;color:#aaa;background:${inactive?'#f8f6f2':'#fafafa'}">${sIdx+1}</td><td><span class="editable-cell" style="${nameStyle}" onclick="editStudentName('${s.id}',this)">${escHtml(s.name)}</span>${inactive?'<span style="margin-left:6px;font-size:0.65rem;background:#e0d9ce;color:#999;padding:1px 6px;border-radius:10px;font-weight:600">Baja</span>':''}</td>`;
     g.activities.forEach(a => {
       const key = s.id+'_'+a.id;
       const val = g.grades[key]!==undefined ? g.grades[key] : '';
@@ -6956,6 +6994,7 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 init();
 iaInit();
+buscInit();
 
 // ── GUARDADO DE EMERGENCIA ────────────────────────────────────────────────
 // Guarda en localStorage SIEMPRE que el usuario cierre/cambie de pestaña
@@ -9834,6 +9873,147 @@ function iaInit(){
   const headAvatar = document.getElementById('iaHeadAvatar');
   if(headAvatar) headAvatar.src = IA_AVATAR_DATA_URI;
   iaApplyEnabled();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 🔍 BUSCADOR FLOTANTE DE ALUMNOS (pestaña Calificaciones)
+// ════════════════════════════════════════════════════════════════════════
+const BUSC_POS_KEY = 'regCalif_busc_pos_v1';
+let buscDrag = { active:false, moved:false, offsetX:0, offsetY:0 };
+
+function buscStartDrag(e){
+  const widget = document.getElementById('buscWidget');
+  if(!widget) return;
+  const rect = widget.getBoundingClientRect();
+  const point = e.touches ? e.touches[0] : e;
+  buscDrag.active = true;
+  buscDrag.moved = false;
+  buscDrag.offsetX = point.clientX - rect.left;
+  buscDrag.offsetY = point.clientY - rect.top;
+  document.addEventListener('mousemove', buscOnDrag);
+  document.addEventListener('mouseup', buscStopDrag);
+  document.addEventListener('touchmove', buscOnDrag, {passive:false});
+  document.addEventListener('touchend', buscStopDrag);
+}
+function buscOnDrag(e){
+  if(!buscDrag.active) return;
+  const widget = document.getElementById('buscWidget');
+  if(!widget) return;
+  const point = e.touches ? e.touches[0] : e;
+  buscDrag.moved = true;
+  let x = point.clientX - buscDrag.offsetX;
+  let y = point.clientY - buscDrag.offsetY;
+  const w = widget.offsetWidth, h = widget.offsetHeight;
+  x = Math.max(4, Math.min(window.innerWidth - w - 4, x));
+  y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
+  widget.style.left = x + 'px';
+  widget.style.top = y + 'px';
+  widget.style.right = 'auto';
+  widget.style.bottom = 'auto';
+  if(e.cancelable) e.preventDefault();
+}
+function buscStopDrag(){
+  if(!buscDrag.active) return;
+  buscDrag.active = false;
+  document.removeEventListener('mousemove', buscOnDrag);
+  document.removeEventListener('mouseup', buscStopDrag);
+  document.removeEventListener('touchmove', buscOnDrag);
+  document.removeEventListener('touchend', buscStopDrag);
+  buscSavePosition();
+}
+function buscSavePosition(){
+  const widget = document.getElementById('buscWidget');
+  if(!widget) return;
+  try{ localStorage.setItem(BUSC_POS_KEY, JSON.stringify({ left: widget.style.left, top: widget.style.top })); }catch(e){}
+}
+
+function buscToggle(){
+  if(buscDrag.moved){ buscDrag.moved = false; return; }
+  const bubble = document.getElementById('buscBubble');
+  const panel = document.getElementById('buscPanel');
+  const input = document.getElementById('buscInput');
+  const results = document.getElementById('buscResults');
+  if(!bubble || !panel) return;
+  bubble.classList.add('busc-gone');
+  panel.classList.add('busc-show');
+  if(input){ input.value = ''; input.classList.remove('busc-found','busc-notfound'); setTimeout(()=>input.focus(), 60); }
+  if(results) results.innerHTML = '';
+}
+function buscCollapse(){
+  const bubble = document.getElementById('buscBubble');
+  const panel = document.getElementById('buscPanel');
+  if(bubble) bubble.classList.remove('busc-gone');
+  if(panel) panel.classList.remove('busc-show');
+}
+
+function _buscNorm(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+}
+
+function buscOnInput(){
+  const input = document.getElementById('buscInput');
+  const results = document.getElementById('buscResults');
+  if(!input || !results) return;
+  const q = _buscNorm(input.value);
+  input.classList.remove('busc-found','busc-notfound');
+  if(!q){ results.innerHTML = ''; return; }
+  const g = (typeof currentGroup === 'function') ? currentGroup() : null;
+  const students = (g && g.students) ? g.students : [];
+  const matches = students.filter(s => {
+    const nombre = _buscNorm(s.name);
+    const codigo = _buscNorm(s.qrCode || '');
+    return nombre.indexOf(q) !== -1 || (codigo && codigo.indexOf(q) !== -1);
+  });
+  if(matches.length){
+    input.classList.add('busc-found');
+    results.innerHTML = matches.slice(0,25).map(s => `
+      <div class="busc-item" onclick="buscIrAAlumno('${s.id}')">
+        <span class="busc-item-name">${escHtml(s.name)}</span>
+        ${s.qrCode ? `<span class="busc-item-meta">Código: ${escHtml(s.qrCode)}</span>` : ''}
+      </div>`).join('');
+  } else {
+    input.classList.add('busc-notfound');
+    results.innerHTML = `<div class="busc-empty">Sin resultados en este grupo</div>`;
+  }
+}
+
+function buscIrAAlumno(sid){
+  buscCollapse();
+  setTimeout(() => {
+    const row = document.getElementById('stuRow_' + sid);
+    if(!row) return;
+    row.scrollIntoView({ behavior:'smooth', block:'center' });
+    row.classList.remove('busc-flash');
+    void row.offsetWidth; // reinicia la animación aunque se repita el mismo alumno
+    row.classList.add('busc-flash');
+  }, 150);
+}
+
+// Solo visible en la pestaña Calificaciones — se llama desde renderTab()
+function _buscActualizarVisibilidad(){
+  const widget = document.getElementById('buscWidget');
+  if(!widget) return;
+  if(typeof currentTab !== 'undefined' && currentTab === 'calificaciones'){
+    widget.classList.add('busc-active');
+  } else {
+    widget.classList.remove('busc-active');
+    buscCollapse();
+  }
+}
+
+function buscInit(){
+  const widget = document.getElementById('buscWidget');
+  if(!widget) return;
+  try{
+    const pos = JSON.parse(localStorage.getItem(BUSC_POS_KEY) || 'null');
+    if(pos && pos.left && pos.top){
+      widget.style.left = pos.left;
+      widget.style.top = pos.top;
+      widget.style.right = 'auto';
+      widget.style.bottom = 'auto';
+    }
+  }catch(e){}
+  _buscActualizarVisibilidad();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
