@@ -8905,20 +8905,27 @@ function fbSaveConfig(cfg) {
 }
 
 // ── Cargar SDK de Firebase (lazy) ─────────────────────────────────────────
+// Ojo: app-compat y database-compat ya se precargan en el <head> (para que
+// la conexión arranque más rápido). Por eso aquí solo se revisa lo que
+// falte — si se volvieran a pedir app/database ya cargados, el SDK de
+// Firebase lanza la advertencia "Firebase is already defined in the global
+// scope" en la consola (inofensiva, pero evitable).
 function _fbCargarSDK(cb) {
-  if (window.firebase && window.firebase.auth) { cb(); return; }
+  function cargarAuth() {
+    if (window.firebase && window.firebase.auth) { cb(); return; }
+    const s3 = document.createElement('script');
+    s3.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js';
+    s3.onload = cb;
+    s3.onerror = () => fbSetStatus('error', 'No se pudo cargar Firebase Auth SDK');
+    document.head.appendChild(s3);
+  }
+  if (window.firebase && window.firebase.database) { cargarAuth(); return; }
   const s = document.createElement('script');
   s.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js';
   s.onload = () => {
     const s2 = document.createElement('script');
     s2.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js';
-    s2.onload = () => {
-      const s3 = document.createElement('script');
-      s3.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js';
-      s3.onload = cb;
-      s3.onerror = () => fbSetStatus('error', 'No se pudo cargar Firebase Auth SDK');
-      document.head.appendChild(s3);
-    };
+    s2.onload = cargarAuth;
     s2.onerror = () => fbSetStatus('error', 'No se pudo cargar Firebase SDK');
     document.head.appendChild(s2);
   };
@@ -9593,7 +9600,7 @@ function iaBuildContext(){
   try{
     const clabels = ['','Excelente','Regular','Mala conducta','Muy grave'];
     const asistData = data.asistencia || {};
-    const groups = (data.groups||[]).map(g=>{
+    let groups = (data.groups||[]).map(g=>{
       // Resumen de asistencia por alumno (recorre todas las fechas registradas de este grupo)
       const asistCount = {};
       Object.keys(asistData).forEach(key=>{
@@ -9610,22 +9617,19 @@ function iaBuildContext(){
       const alumnos = (g.students||[]).filter(s=>!s.inactive).map(s=>{
         const avg = calcAvg(g, s.id);
         const cond = (g.conduct && g.conduct[s.id]) || null;
-        const incidentes = (cond && cond.incidents) ? cond.incidents.map(i=>({fecha:i.date, nota:i.text})) : [];
-        // Calificación de cada actividad individual
-        const calificaciones = (g.activities||[]).map(a=>{
-          const val = (g.grades||{})[s.id+'_'+a.id];
-          return { actividad: a.name, calificacion: (val===undefined||val==='') ? null : val };
-        });
+        // Solo los 2 incidentes más recientes — el historial completo de
+        // conducta de todos los alumnos era la parte más pesada del contexto.
+        const incidentes = (cond && cond.incidents) ? cond.incidents.slice(-2).map(i=>({fecha:i.date, nota:i.text})) : [];
+        // Cuenta de tareas pendientes (no el detalle de cada actividad —
+        // eso multiplicaba el tamaño por el número de actividades).
         const tareasPendientes = (g.activities||[]).filter(a=>{
           const hw = (g.hwStatus && g.hwStatus[s.id+'_'+a.id]) || {};
           return hw.status === 'pendiente' || !hw.status;
-        }).map(a=>a.name);
+        }).length;
         const asist = asistCount[s.id] || {presente:0, ausente:0, tarde:0};
         return {
           nombre: s.name,
-          codigoQR: s.qrCode || null,
           promedio: avg,
-          calificaciones,
           conducta: cond ? (clabels[cond.level] || null) : null,
           incidentesConducta: incidentes,
           tareasPendientes,
@@ -9640,7 +9644,36 @@ function iaBuildContext(){
         alumnos
       };
     });
-    return JSON.stringify(groups);
+
+    // ── Salvaguarda de tamaño ──────────────────────────────────────────
+    // Groq rechaza (HTTP 413) solicitudes demasiado pesadas. Un docente con
+    // muchos grupos/alumnos puede generar un JSON de varios cientos de KB,
+    // así que aquí se recorta progresivamente hasta quedar dentro de un
+    // límite razonable, priorizando que el asistente siga funcionando
+    // aunque vea menos detalle en vez de fallar.
+    const LIMITE = 30000; // caracteres aprox. (deja margen bajo el límite de Groq)
+    let json = JSON.stringify(groups);
+    if (json.length > LIMITE) {
+      // 1) quitar incidentes de conducta (texto libre, suele pesar más)
+      groups = groups.map(g => ({ ...g, alumnos: g.alumnos.map(({ incidentesConducta, ...resto }) => resto) }));
+      json = JSON.stringify(groups);
+    }
+    if (json.length > LIMITE) {
+      // 2) conservar el detalle solo del grupo abierto actualmente; el resto
+      // se resume a nombre + promedio + conducta
+      const gs = data.groups || [];
+      groups = groups.map((g, i) => {
+        if (gs[i] && gs[i].id === currentGroupId) return g;
+        return { ...g, alumnos: g.alumnos.map(a => ({ nombre: a.nombre, promedio: a.promedio, conducta: a.conducta })) };
+      });
+      json = JSON.stringify(groups);
+    }
+    if (json.length > LIMITE) {
+      // 3) último recurso: recortar el texto — el modelo puede seguir
+      // usando el JSON parcial aunque quede incompleto al final.
+      json = json.slice(0, LIMITE) + '…(datos recortados por tamaño)]';
+    }
+    return json;
   }catch(e){ console.error('iaBuildContext error', e); return '[]'; }
 }
 
@@ -9704,13 +9737,16 @@ async function iaSend(){
       const isAuthError = resp.status === 401 || resp.status === 403 || /api key|unauthor|permission/i.test(msg);
       const isModelError = resp.status === 404 || /not found|not supported|unknown model/i.test(msg);
       const isRateLimit = resp.status === 429 || /rate limit/i.test(msg);
+      const isTooLarge = resp.status === 413 || /too large|payload/i.test(msg);
       iaAppendMsg('bot', isAuthError
         ? '❌ Tu clave de Groq no es válida. Revisa ⚙️ Ajustes → Asistente de IA.'
         : isModelError
           ? '❌ Este modelo ya no está disponible gratis en Groq. Ve a ⚙️ Ajustes → Asistente de IA y elige otro modelo, luego Guardar.'
           : isRateLimit
             ? '⏳ Se alcanzó el límite de uso gratuito por ahora (los modelos gratis tienen un tope por minuto/día). Intenta de nuevo en un momento.'
-            : '❌ ' + msg);
+            : isTooLarge
+              ? '❌ Tienes demasiados grupos/alumnos registrados para enviarlos de una vez. Intenta abrir el grupo específico sobre el que preguntas y vuelve a intentar.'
+              : '❌ ' + msg);
       return;
     }
     const choice = json.choices && json.choices[0];
