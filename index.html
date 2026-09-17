@@ -8118,41 +8118,35 @@ function exportarAsistencia(){
   _loadAsist();
   const prefix=g.id+'_';
   const todFechas=Object.keys(_asist.records).filter(k=>k.startsWith(prefix)&&!k.includes('_motivo')).map(k=>k.slice(prefix.length)).sort();
-  if(!todFechas.length){showToast('❌ No hay registros de asistencia para exportar','error');return;}
 
   const ex=document.getElementById('exportAsistModal');if(ex)ex.remove();
   const modal=document.createElement('div');
   modal.id='exportAsistModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);padding:16px';
-  const fechaMin=todFechas[0],fechaMax=todFechas[todFechas.length-1];
-  const meses=[...new Set(todFechas.map(f=>f.slice(0,7)))].sort();
-  const anios=[...new Set(todFechas.map(f=>f.slice(0,4)))].sort();
+  const hoy=new Date().toISOString().slice(0,10);
+  const mesDefault = hoy.slice(0,7);
+  const anioDefault = hoy.slice(0,4);
+  const rango = todFechas.length ? `Registros guardados: ${todFechas[0]} al ${todFechas[todFechas.length-1]}` : 'Aún no hay registros guardados en este grupo';
   modal.innerHTML=`
     <div style="background:white;border-radius:12px;padding:26px 28px 22px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
       <div style="font-family:'DM Serif Display',serif;font-size:1.15rem;margin-bottom:6px">📊 Exportar Reporte de Asistencia</div>
-      <div style="font-size:0.8rem;color:#888;margin-bottom:20px">${escHtml(g.name)} — Registros: ${fechaMin} al ${fechaMax}</div>
+      <div style="font-size:0.8rem;color:#888;margin-bottom:20px">${escHtml(g.name)} — ${rango}</div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
         <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:2px">Período a exportar</div>
         <label id="optDia" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:2px solid var(--green);border-radius:8px;cursor:pointer">
           <input type="radio" name="expP" value="dia" checked style="accent-color:var(--green)" onchange="_asistRefreshPreview()">
-          <div><div style="font-weight:700;font-size:0.88rem">📅 Por día</div><div style="font-size:0.72rem;color:#888">Lista completa de un día específico</div></div>
-          <select id="exportDia" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
-            ${todFechas.map(f=>{const d=new Date(f+'T12:00');return `<option value="${f}" ${f===fechaMax?'selected':''}>${d.toLocaleDateString('es-MX',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</option>`;}).join('')}
-          </select>
+          <div><div style="font-weight:700;font-size:0.88rem">📅 Por día</div><div style="font-size:0.72rem;color:#888">Lista completa de un día específico — elige cualquier fecha</div></div>
+          <input type="date" id="exportDia" value="${hoy}" style="margin-left:auto;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
         </label>
         <label id="optMes" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="_asistSelPeriodo('mes')">
           <input type="radio" name="expP" value="mes" style="accent-color:var(--blue)" onchange="_asistRefreshPreview()">
           <div><div style="font-weight:700;font-size:0.88rem">📆 Por mes</div><div style="font-size:0.72rem;color:#888">Todas las clases del mes, columna por día</div></div>
-          <select id="exportMes" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
-            ${meses.map(m=>{const[y,mo]=m.split('-');const n=new Date(y,mo-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});return `<option value="${m}" ${m===meses[meses.length-1]?'selected':''}>${n.charAt(0).toUpperCase()+n.slice(1)}</option>`;}).join('')}
-          </select>
+          <input type="month" id="exportMes" value="${mesDefault}" style="margin-left:auto;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
         </label>
         <label id="optAnio" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="_asistSelPeriodo('anio')">
           <input type="radio" name="expP" value="anio" style="accent-color:var(--orange)" onchange="_asistRefreshPreview()">
           <div><div style="font-weight:700;font-size:0.88rem">📋 Año completo</div><div style="font-size:0.72rem;color:#888">Resumen con totales y porcentaje por alumno</div></div>
-          <select id="exportAnio" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
-            ${anios.map(a=>`<option value="${a}" ${a===anios[anios.length-1]?'selected':''}>${a}</option>`).join('')}
-          </select>
+          <input type="number" id="exportAnio" value="${anioDefault}" min="2020" max="2099" style="margin-left:auto;width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
         </label>
       </div>
 
@@ -8164,9 +8158,10 @@ function exportarAsistencia(){
         <div id="asistPreviewArea" style="padding:12px"></div>
       </div>
 
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap">
         <button onclick="document.getElementById('exportAsistModal').remove()" style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
         <button onclick="_asistImprimir()" style="padding:8px 20px;background:var(--ink);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+        <button onclick="_generarWordAsistencia()" style="padding:8px 22px;background:#2b579a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">📝 Descargar Word</button>
         <button onclick="_generarExcelAsistencia()" style="padding:8px 22px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">📥 Descargar Excel</button>
       </div>
     </div>`;
@@ -8233,7 +8228,10 @@ function _asistDatosReporte(periodo, valor){
   let fechas=todFechas, titulo='', archivo='', resumen=false;
   if(periodo==='dia'){
     const dia=valor || todFechas[todFechas.length-1];
-    if(!todFechas.includes(dia)) return {error:'No hay registros para ese día'};
+    if(!todFechas.includes(dia)){
+      const df=new Date(dia+'T12:00').toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+      return {error:'No hay asistencia registrada el ' + df + ' para este grupo'};
+    }
     fechas=[dia];
     const d=new Date(dia+'T12:00');
     titulo=d.toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
@@ -8389,7 +8387,38 @@ function _generarExcelAsistencia(){
   showToast('📊 Reporte Excel generado correctamente','success');
 }
 
-// ── ASIGNAR CÓDIGO QR EXTERNO ──────────────────────────────────
+function _generarWordAsistencia(){
+  const datos=_asistLeerSeleccion();
+  if(datos.error){ showToast('❌ '+datos.error,'error'); return; }
+  const g=datos.g;
+  const anchoTabla = datos.resumen ? 'auto' : '100%';
+
+  // Documento compatible con Word — mismo contenido que el Excel/vista previa,
+  // envuelto con las directivas de Word (tamaño de página, orientación).
+  let html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8">
+<!--[if gte mso 9]><xml><w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>90</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument></xml><![endif]-->
+<style>
+@page{ size:${datos.resumen?'21.6cm 27.9cm':'27.9cm 21.6cm'}; margin:1.4cm; }
+${_ASIST_REPORT_CSS}
+table{ width:${anchoTabla}; }
+</style></head>
+<body>${_asistBuildReportHTML(datos)}</body></html>`;
+
+  const blob=new Blob(['\ufeff', html],{type:'application/msword;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`${datos.archivo}_${g.name.replace(/[^a-z0-9]/gi,'_')}.doc`;
+  a.click();URL.revokeObjectURL(url);
+  const modal=document.getElementById('exportAsistModal'); if(modal) modal.remove();
+  showToast('📝 Reporte Word generado correctamente','success');
+}
+
+
 function editGradoGrupo(sid, gid){
   const g = gid ? data.groups.find(x=>x.id===gid) : currentGroup();
   const s = g && g.students.find(x=>x.id===sid); if(!g || !s) return;
