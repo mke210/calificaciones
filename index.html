@@ -7154,18 +7154,25 @@ function renderAsistenciaTab(container){
           <thead><tr style="background:#f5f0e8">
             <th style="padding:8px 14px;text-align:left;font-size:0.68rem;text-transform:uppercase;color:#888;font-weight:700">#</th>
             <th style="padding:8px 14px;text-align:left;font-size:0.68rem;text-transform:uppercase;color:#888;font-weight:700">Alumno</th>
+            <th style="padding:8px 14px;text-align:center;font-size:0.68rem;text-transform:uppercase;color:#888;font-weight:700">Grado/Grupo</th>
             <th style="padding:8px 14px;text-align:center;font-size:0.68rem;text-transform:uppercase;color:#888;font-weight:700">QR</th>
             <th style="padding:8px 14px;text-align:center;font-size:0.68rem;text-transform:uppercase;color:#888;font-weight:700">Estado</th>
             <th style="padding:8px 14px;text-align:center;font-size:0.68rem;text-transform:uppercase;color:#888;font-weight:700">Acciones</th>
           </tr></thead>
           <tbody>
-          ${g.students.filter(s=>!s.inactive).map((s,i)=>{
+          ${g.students.filter(s=>!s.inactive).map(s=>({s, grado:_alumnoGrado(s,g), letra:_alumnoGrupo(s,g)})).sort((a,b)=>{
+            const ga=a.grado||'', gb=b.grado||''; if(ga!==gb) return ga.localeCompare(gb);
+            const la=a.letra||'', lb=b.letra||''; if(la!==lb) return la.localeCompare(lb);
+            return a.s.name.localeCompare(b.s.name,'es');
+          }).map(({s,grado,letra},i)=>{
             const st=rec[s.id]||'';
             const badge=st==='presente'?'<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✅ Presente</span>':st==='ausente'?'<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">❌ Ausente</span>':st==='tarde'?(()=>{const mot=rec[s.id+'_motivo'];return '<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde'+(mot?' — '+escHtml(mot):'')+'</span>';})():'<span style="background:#f0f0f0;color:#aaa;padding:3px 12px;border-radius:20px;font-weight:600;font-size:0.78rem">— Sin marcar</span>';
             const qrTag=s.qrCode?`<span style="background:#e0f0e8;color:#2a6a3a;padding:2px 7px;border-radius:10px;font-size:0.72rem;font-weight:700">${escHtml(s.qrCode)}</span>`:'<span style="color:#ddd;font-size:0.72rem">—</span>';
+            const ggTag=`<span onclick="editGradoGrupo('${s.id}','${g.id}')" title="Clic para editar grado, grupo y sexo" style="cursor:pointer;background:#eef0fa;color:#2a3a7a;padding:2px 9px;border-radius:10px;font-size:0.74rem;font-weight:700">${grado&&grado!=='?'?grado+'°':'—'}${letra||''}</span>`;
             return `<tr style="${i%2===0?'':'background:#faf8f4'}" id="asistRow_${s.id}">
               <td style="padding:8px 14px;color:#aaa;font-size:0.78rem">${i+1}</td>
               <td style="padding:8px 14px;font-weight:500">${escHtml(s.name)}</td>
+              <td style="padding:8px 14px;text-align:center">${ggTag}</td>
               <td style="padding:8px 14px;text-align:center">${qrTag}</td>
               <td style="padding:8px 14px;text-align:center" id="asistBadge_${s.id}">${badge}</td>
               <td style="padding:8px 14px;text-align:center"><div style="display:flex;gap:4px;justify-content:center">
@@ -8111,164 +8118,274 @@ function exportarAsistencia(){
   _loadAsist();
   const prefix=g.id+'_';
   const todFechas=Object.keys(_asist.records).filter(k=>k.startsWith(prefix)&&!k.includes('_motivo')).map(k=>k.slice(prefix.length)).sort();
-  if(!todFechas.length){showToast('No hay registros de asistencia para exportar','error');return;}
+  if(!todFechas.length){showToast('❌ No hay registros de asistencia para exportar','error');return;}
 
   const ex=document.getElementById('exportAsistModal');if(ex)ex.remove();
   const modal=document.createElement('div');
   modal.id='exportAsistModal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);padding:16px';
   const fechaMin=todFechas[0],fechaMax=todFechas[todFechas.length-1];
   const meses=[...new Set(todFechas.map(f=>f.slice(0,7)))].sort();
   const anios=[...new Set(todFechas.map(f=>f.slice(0,4)))].sort();
   modal.innerHTML=`
-    <div style="background:white;border-radius:12px;padding:26px 28px 22px;width:480px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
+    <div style="background:white;border-radius:12px;padding:26px 28px 22px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:modalIn 0.18s ease">
       <div style="font-family:'DM Serif Display',serif;font-size:1.15rem;margin-bottom:6px">📊 Exportar Reporte de Asistencia</div>
-      <div style="font-size:0.8rem;color:#888;margin-bottom:20px">${g.name} — Registros: ${fechaMin} al ${fechaMax}</div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <div style="font-size:0.8rem;color:#888;margin-bottom:20px">${escHtml(g.name)} — Registros: ${fechaMin} al ${fechaMax}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
         <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:2px">Período a exportar</div>
         <label id="optDia" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:2px solid var(--green);border-radius:8px;cursor:pointer">
-          <input type="radio" name="expP" value="dia" checked style="accent-color:var(--green)">
+          <input type="radio" name="expP" value="dia" checked style="accent-color:var(--green)" onchange="_asistRefreshPreview()">
           <div><div style="font-weight:700;font-size:0.88rem">📅 Por día</div><div style="font-size:0.72rem;color:#888">Lista completa de un día específico</div></div>
-          <select id="exportDia" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem">
-            ${todFechas.map(f=>{const d=new Date(f+'T12:00');return `<option value="${f}">${d.toLocaleDateString('es-MX',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</option>`;}).join('')}
+          <select id="exportDia" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
+            ${todFechas.map(f=>{const d=new Date(f+'T12:00');return `<option value="${f}" ${f===fechaMax?'selected':''}>${d.toLocaleDateString('es-MX',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</option>`;}).join('')}
           </select>
         </label>
-        <label id="optMes" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="document.getElementById('optDia').style.borderWidth='1.5px';document.getElementById('optDia').style.borderColor='var(--border)';this.style.border='2px solid var(--blue)'">
-          <input type="radio" name="expP" value="mes" style="accent-color:var(--blue)">
+        <label id="optMes" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="_asistSelPeriodo('mes')">
+          <input type="radio" name="expP" value="mes" style="accent-color:var(--blue)" onchange="_asistRefreshPreview()">
           <div><div style="font-weight:700;font-size:0.88rem">📆 Por mes</div><div style="font-size:0.72rem;color:#888">Todas las clases del mes, columna por día</div></div>
-          <select id="exportMes" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem">
-            ${meses.map(m=>{const[y,mo]=m.split('-');const n=new Date(y,mo-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});return `<option value="${m}">${n.charAt(0).toUpperCase()+n.slice(1)}</option>`;}).join('')}
+          <select id="exportMes" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
+            ${meses.map(m=>{const[y,mo]=m.split('-');const n=new Date(y,mo-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});return `<option value="${m}" ${m===meses[meses.length-1]?'selected':''}>${n.charAt(0).toUpperCase()+n.slice(1)}</option>`;}).join('')}
           </select>
         </label>
-        <label id="optAnio" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="document.getElementById('optDia').style.border='1.5px solid var(--border)';document.getElementById('optMes').style.border='1.5px solid var(--border)';this.style.border='2px solid var(--orange)'">
-          <input type="radio" name="expP" value="anio" style="accent-color:var(--orange)">
+        <label id="optAnio" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer" onclick="_asistSelPeriodo('anio')">
+          <input type="radio" name="expP" value="anio" style="accent-color:var(--orange)" onchange="_asistRefreshPreview()">
           <div><div style="font-weight:700;font-size:0.88rem">📋 Año completo</div><div style="font-size:0.72rem;color:#888">Resumen con totales y porcentaje por alumno</div></div>
-          <select id="exportAnio" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem">
-            ${anios.map(a=>`<option value="${a}">${a}</option>`).join('')}
+          <select id="exportAnio" style="margin-left:auto;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:0.78rem" onchange="_asistRefreshPreview()">
+            ${anios.map(a=>`<option value="${a}" ${a===anios[anios.length-1]?'selected':''}>${a}</option>`).join('')}
           </select>
         </label>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#666">👁️ Vista previa</div>
+        <div style="font-size:0.68rem;color:#aaa">Alumnos ordenados por grado y grupo real</div>
+      </div>
+      <div id="asistPreviewWrap" style="border:1.5px solid var(--border);border-radius:8px;overflow:auto;max-height:340px;background:#fcfbf8">
+        <div id="asistPreviewArea" style="padding:12px"></div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
         <button onclick="document.getElementById('exportAsistModal').remove()" style="padding:8px 18px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">Cancelar</button>
+        <button onclick="_asistImprimir()" style="padding:8px 20px;background:var(--ink);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
         <button onclick="_generarExcelAsistencia()" style="padding:8px 22px;background:var(--green);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">📥 Descargar Excel</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  _asistRefreshPreview();
 }
 
-function _generarExcelAsistencia(){
-  const g=currentGroup();if(!g)return;
+// Marca visualmente cuál de las 3 opciones de período está seleccionada
+function _asistSelPeriodo(val){
+  const map={dia:'optDia',mes:'optMes',anio:'optAnio'};
+  const colores={dia:'var(--green)',mes:'var(--blue)',anio:'var(--orange)'};
+  Object.keys(map).forEach(k=>{
+    const el=document.getElementById(map[k]);
+    if(!el)return;
+    el.style.border = k===val ? `2px solid ${colores[k]}` : '1.5px solid var(--border)';
+  });
+  const radio=document.querySelector(`input[name=expP][value=${val}]`);
+  if(radio) radio.checked=true;
+}
+
+// Lee la selección actual del modal y arma los datos del reporte
+// (o un objeto {error} si no hay nada que exportar en ese período)
+function _asistLeerSeleccion(){
+  const periodo=document.querySelector('input[name=expP]:checked')?.value||'dia';
+  let valor='';
+  if(periodo==='dia') valor=document.getElementById('exportDia')?.value||'';
+  else if(periodo==='mes') valor=document.getElementById('exportMes')?.value||'';
+  else valor=document.getElementById('exportAnio')?.value||'';
+  return _asistDatosReporte(periodo, valor);
+}
+
+function _asistRefreshPreview(){
+  const area=document.getElementById('asistPreviewArea');
+  if(!area) return;
+  const datos=_asistLeerSeleccion();
+  if(datos.error){
+    area.innerHTML=`<div style="padding:24px;text-align:center;color:#c8422a;font-size:0.85rem;font-weight:600">⚠️ ${escHtml(datos.error)}</div>`;
+    return;
+  }
+  area.innerHTML=`<style>${_ASIST_REPORT_CSS}</style>${_asistBuildReportHTML(datos)}`;
+}
+
+// ── Construye los datos de un reporte (día/mes/año) — alumnos ordenados
+// por su grado y grupo REAL (aunque la clase junte varias letras, ej. "1° ABC")
+function _asistDatosReporte(periodo, valor){
+  const g=currentGroup(); if(!g) return {error:'Selecciona un grupo'};
   _loadAsist();
-  const periodo=document.querySelector('input[name=expP]:checked')?.value||'mes';
   const prefix=g.id+'_';
   const todFechas=Object.keys(_asist.records).filter(k=>k.startsWith(prefix)&&!k.includes('_motivo')).map(k=>k.slice(prefix.length)).sort();
-  const alumnos=g.students.filter(s=>!s.inactive);
-  let fechas=todFechas, titulo='', archivo='';
+  if(!todFechas.length) return {error:'No hay registros de asistencia para exportar'};
+
+  const alumnos=g.students.filter(s=>!s.inactive).map(s=>({
+    s, grado:_alumnoGrado(s,g), letra:_alumnoGrupo(s,g)
+  })).sort((a,b)=>{
+    const ga=a.grado||'', gb=b.grado||'';
+    if(ga!==gb) return ga.localeCompare(gb);
+    const la=a.letra||'', lb=b.letra||'';
+    if(la!==lb) return la.localeCompare(lb);
+    return a.s.name.localeCompare(b.s.name,'es');
+  });
+  if(!alumnos.length) return {error:'No hay alumnos activos en este grupo'};
+
+  let fechas=todFechas, titulo='', archivo='', resumen=false;
   if(periodo==='dia'){
-    const dia=document.getElementById('exportDia').value;
+    const dia=valor || todFechas[todFechas.length-1];
+    if(!todFechas.includes(dia)) return {error:'No hay registros para ese día'};
     fechas=[dia];
     const d=new Date(dia+'T12:00');
     titulo=d.toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
     titulo=titulo.charAt(0).toUpperCase()+titulo.slice(1);
     archivo=`asistencia_dia_${dia}`;
   } else if(periodo==='mes'){
-    const mes=document.getElementById('exportMes').value;
+    const mes=valor || todFechas[todFechas.length-1].slice(0,7);
     fechas=todFechas.filter(f=>f.startsWith(mes));
+    if(!fechas.length) return {error:'No hay registros para ese mes'};
     const[y,mo]=mes.split('-');
     const n=new Date(y,mo-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});
     titulo='Asistencia — '+n.charAt(0).toUpperCase()+n.slice(1);
     archivo=`asistencia_mes_${mes}`;
   } else {
-    const anio=document.getElementById('exportAnio').value;
+    const anio=valor || todFechas[todFechas.length-1].slice(0,4);
     fechas=todFechas.filter(f=>f.startsWith(anio));
+    if(!fechas.length) return {error:'No hay registros para ese año'};
     titulo=`Reporte Anual de Asistencia ${anio}`;
     archivo=`asistencia_anio_${anio}`;
+    // El año completo SIEMPRE se muestra como resumen (totales y % por alumno).
+    // Antes se generaba una columna por cada día del año (cientos de columnas),
+    // lo que producía un archivo prácticamente inutilizable.
+    resumen=true;
   }
-  if(!fechas.length){showToast('No hay registros en el período seleccionado','error');return;}
 
+  return {g, prefix, alumnos, fechas, titulo, archivo, resumen};
+}
+
+// ── Construye el HTML de la tabla del reporte (compartido por vista previa,
+// impresión y descarga en Excel) ──
+function _asistBuildReportHTML(datos){
+  const {g, prefix, alumnos, fechas, titulo, resumen}=datos;
   const iconos={presente:'✅',ausente:'❌',tarde:'⏰'};
-  const bgColor={presente:'#d4edda',ausente:'#f8d7da',tarde:'#ffe5cc'};
-  const fgColor={presente:'#155724',ausente:'#721c24',tarde:'#7a3a00'};
+  const bgColor={presente:'#d4edda',ausente:'#f8d7da',tarde:'#ffe5cc','':'#ffffff'};
+  const fgColor={presente:'#155724',ausente:'#721c24',tarde:'#7a3a00','':'#bbbbbb'};
+  const gg=({grado,letra})=> (grado&&grado!=='?'?grado+'°':'—')+(letra||'');
 
-  // Calcular totales
-  const tots=alumnos.map(s=>{
+  const tots=alumnos.map(({s})=>{
     let p=0,a=0,t=0;
     fechas.forEach(f=>{const r=_asist.records[prefix+f]||{};if(r[s.id]==='presente')p++;else if(r[s.id]==='ausente')a++;else if(r[s.id]==='tarde')t++;});
     return{p,a,t};
   });
 
-  // Build Excel-compatible HTML table
-  let html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Asistencia</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><style>
-body{font-family:Arial,sans-serif;font-size:10pt}table{border-collapse:collapse}
-th{background:#1a3a2a;color:white;font-weight:bold;padding:6px 8px;border:1px solid #aaa;text-align:center;font-size:8.5pt;vertical-align:bottom}
-th.nh{background:#1a1a2e;text-align:left}th.tot{background:#2a4a3a}
-td{padding:5px 8px;border:1px solid #ddd;font-size:9pt;vertical-align:middle}
-td.n{font-weight:600;color:#1a1a2e;background:#f8f6f0}td.c{text-align:center;font-weight:600}
-.tt{font-size:13pt;font-weight:bold;color:#1a1a2e;margin-bottom:3px}.st{font-size:9.5pt;color:#555;margin-bottom:12px}
-</style></head><body>
-<p class="tt">📋 ${titulo}</p>
-<p class="st">Grupo: <b>${g.name}</b>${g.subject?' — '+g.subject:''} &nbsp;|&nbsp; Alumnos: <b>${alumnos.length}</b> &nbsp;|&nbsp; Días: <b>${fechas.length}</b> &nbsp;|&nbsp; Generado: ${new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'})}</p>
-<table><thead><tr><th class="nh" style="min-width:180px">#&nbsp; Alumno</th>`;
+  let html=`<p class="tt">📋 ${escHtml(titulo)}</p>
+  <p class="st">Grupo: <b>${escHtml(g.name)}</b>${g.subject?' — '+escHtml(g.subject):''} &nbsp;|&nbsp; Alumnos: <b>${alumnos.length}</b> &nbsp;|&nbsp; Días: <b>${fechas.length}</b> &nbsp;|&nbsp; Generado: ${new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'})}</p>`;
 
-  fechas.forEach(f=>{
-    const d=new Date(f+'T12:00');
-    const dw=d.toLocaleDateString('es-MX',{weekday:'short'}).replace('.','');
-    const dm=d.getDate();
-    const mn=d.toLocaleDateString('es-MX',{month:'short'}).replace('.','');
-    html+=`<th style="min-width:46px;width:46px;font-size:7.5pt">${dw}<br>${dm}<br>${mn}</th>`;
-  });
-  html+=`<th class="tot" style="min-width:44px">✅<br>Pres.</th><th class="tot" style="min-width:44px">❌<br>Aus.</th><th class="tot" style="min-width:44px">⏰<br>Tarde</th><th class="tot" style="min-width:54px">%<br>Asist.</th></tr></thead><tbody>`;
+  if(resumen){
+    html+=`<table><thead><tr><th class="nh" style="min-width:190px">#&nbsp; Alumno</th><th style="min-width:80px">Grado/Grupo</th><th class="tot" style="min-width:60px">✅ Pres.</th><th class="tot" style="min-width:60px">❌ Aus.</th><th class="tot" style="min-width:60px">⏰ Tarde</th><th class="tot" style="min-width:70px">% Asist.</th></tr></thead><tbody>`;
+    alumnos.forEach((al,i)=>{
+      const tot=tots[i];
+      const pct=fechas.length>0?Math.round(tot.p/fechas.length*100):0;
+      html+=`<tr><td class="n">${i+1}&nbsp; ${escHtml(al.s.name)}</td><td class="c" style="font-weight:700;color:#2a6a4a">${gg(al)}</td><td class="c" style="background:#e8f5e9">${tot.p}</td><td class="c" style="background:#fce8e8">${tot.a}</td><td class="c" style="background:#fff3e0">${tot.t}</td><td class="c" style="background:${pct>=80?'#c8e6c9':pct>=60?'#fff9c4':'#ffcdd2'};font-weight:bold">${pct}%</td></tr>`;
+    });
+    const tP=tots.reduce((s,x)=>s+x.p,0),tA=tots.reduce((s,x)=>s+x.a,0),tT=tots.reduce((s,x)=>s+x.t,0);
+    const tPct=alumnos.length*fechas.length>0?Math.round(tP/(alumnos.length*fechas.length)*100):0;
+    html+=`<tr style="background:#e8e4dc;font-weight:bold"><td class="n" style="font-weight:bold" colspan="2">TOTAL GRUPO</td><td class="c" style="background:#a5d6a7">${tP}</td><td class="c" style="background:#ef9a9a">${tA}</td><td class="c" style="background:#ffcc80">${tT}</td><td class="c" style="background:#81c784;font-size:11pt">${tPct}%</td></tr></tbody></table>`;
+  } else {
+    html+=`<table><thead><tr><th class="nh" style="min-width:180px">#&nbsp; Alumno</th><th style="min-width:64px">Grado/<br>Grupo</th>`;
+    fechas.forEach(f=>{
+      const d=new Date(f+'T12:00');
+      const dw=d.toLocaleDateString('es-MX',{weekday:'short'}).replace('.','');
+      const dm=d.getDate();
+      const mn=d.toLocaleDateString('es-MX',{month:'short'}).replace('.','');
+      html+=`<th style="min-width:46px;width:46px;font-size:7.5pt">${dw}<br>${dm}<br>${mn}</th>`;
+    });
+    html+=`<th class="tot" style="min-width:44px">✅<br>Pres.</th><th class="tot" style="min-width:44px">❌<br>Aus.</th><th class="tot" style="min-width:44px">⏰<br>Tarde</th><th class="tot" style="min-width:54px">%<br>Asist.</th></tr></thead><tbody>`;
 
-  alumnos.forEach((s,i)=>{
-    html+=`<tr><td class="n">${i+1}&nbsp; ${s.name}</td>`;
+    alumnos.forEach((al,i)=>{
+      const {s}=al;
+      html+=`<tr><td class="n">${i+1}&nbsp; ${escHtml(s.name)}</td><td class="c" style="font-weight:700;color:#2a6a4a">${gg(al)}</td>`;
+      fechas.forEach(f=>{
+        const r=_asist.records[prefix+f]||{};
+        const st=r[s.id]||'';
+        const mot=st==='tarde'?(r[s.id+'_motivo']||''):'';
+        html+=`<td class="c" style="background:${bgColor[st]};color:${fgColor[st]}" title="${mot?'Motivo: '+escHtml(mot):''}">${st?iconos[st]:'—'}</td>`;
+      });
+      const tot=tots[i];
+      const pct=fechas.length>0?Math.round(tot.p/fechas.length*100):0;
+      html+=`<td class="c" style="background:#e8f5e9">${tot.p}</td><td class="c" style="background:#fce8e8">${tot.a}</td><td class="c" style="background:#fff3e0">${tot.t}</td><td class="c" style="background:${pct>=80?'#c8e6c9':pct>=60?'#fff9c4':'#ffcdd2'};font-weight:bold">${pct}%</td></tr>`;
+    });
+
+    html+=`<tr style="background:#e8e4dc;font-weight:bold"><td class="n" style="font-weight:bold" colspan="2">TOTAL GRUPO</td>`;
     fechas.forEach(f=>{
       const r=_asist.records[prefix+f]||{};
-      const st=r[s.id]||'';
-      const mot=st==='tarde'?(r[s.id+'_motivo']||''):'';
-      html+=`<td class="c" style="background:${bgColor[st]||'#fff'};color:${fgColor[st]||'#bbb'}" title="${mot?'Motivo: '+mot:''}">${st?iconos[st]:'—'}</td>`;
+      let p=0,a=0,t=0;
+      alumnos.forEach(({s})=>{if(r[s.id]==='presente')p++;else if(r[s.id]==='ausente')a++;else if(r[s.id]==='tarde')t++;});
+      html+=`<td class="c" style="font-size:7.5pt;background:#e8f0e8">P${p}<br>A${a}<br>T${t}</td>`;
     });
-    const tot=tots[i];
-    const pct=fechas.length>0?Math.round(tot.p/fechas.length*100):0;
-    html+=`<td class="c" style="background:#e8f5e9">${tot.p}</td><td class="c" style="background:#fce8e8">${tot.a}</td><td class="c" style="background:#fff3e0">${tot.t}</td><td class="c" style="background:${pct>=80?'#c8e6c9':pct>=60?'#fff9c4':'#ffcdd2'};font-weight:bold">${pct}%</td></tr>`;
-  });
+    const tP=tots.reduce((s,x)=>s+x.p,0),tA=tots.reduce((s,x)=>s+x.a,0),tT=tots.reduce((s,x)=>s+x.t,0);
+    const tPct=alumnos.length*fechas.length>0?Math.round(tP/(alumnos.length*fechas.length)*100):0;
+    html+=`<td class="c" style="background:#a5d6a7">${tP}</td><td class="c" style="background:#ef9a9a">${tA}</td><td class="c" style="background:#ffcc80">${tT}</td><td class="c" style="background:#81c784;font-size:11pt">${tPct}%</td></tr></tbody></table>`;
 
-  // Fila totales grupo
-  html+=`<tr style="background:#e8e4dc;font-weight:bold"><td class="n" style="font-weight:bold">TOTAL GRUPO</td>`;
-  fechas.forEach(f=>{
-    const r=_asist.records[prefix+f]||{};
-    let p=0,a=0,t=0;
-    alumnos.forEach(s=>{if(r[s.id]==='presente')p++;else if(r[s.id]==='ausente')a++;else if(r[s.id]==='tarde')t++;});
-    html+=`<td class="c" style="font-size:7.5pt;background:#e8f0e8">P${p}<br>A${a}<br>T${t}</td>`;
-  });
-  const tP=tots.reduce((s,x)=>s+x.p,0),tA=tots.reduce((s,x)=>s+x.a,0),tT=tots.reduce((s,x)=>s+x.t,0);
-  const tPct=alumnos.length*fechas.length>0?Math.round(tP/(alumnos.length*fechas.length)*100):0;
-  html+=`<td class="c" style="background:#a5d6a7">${tP}</td><td class="c" style="background:#ef9a9a">${tA}</td><td class="c" style="background:#ffcc80">${tT}</td><td class="c" style="background:#81c784;font-size:11pt">${tPct}%</td></tr></tbody></table>`;
-
-  // Tardanzas con motivos
-  const tardDet=[];
-  alumnos.forEach(s=>{
-    fechas.forEach(f=>{
-      const r=_asist.records[prefix+f]||{};
-      if(r[s.id]==='tarde'&&r[s.id+'_motivo']){
-        const d=new Date(f+'T12:00');
-        tardDet.push({n:s.name,f:d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),m:r[s.id+'_motivo']});
-      }
+    // Tardanzas con motivos
+    const tardDet=[];
+    alumnos.forEach(({s})=>{
+      fechas.forEach(f=>{
+        const r=_asist.records[prefix+f]||{};
+        if(r[s.id]==='tarde'&&r[s.id+'_motivo']){
+          const d=new Date(f+'T12:00');
+          tardDet.push({n:s.name,f:d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),m:r[s.id+'_motivo']});
+        }
+      });
     });
-  });
-  if(tardDet.length){
-    html+=`<br><p style="font-size:11pt;font-weight:bold;color:#7a3a00;margin:16px 0 8px">⏰ Detalle de Tardanzas</p><table style="width:auto"><thead><tr><th style="background:#7a3a00;min-width:180px;text-align:left">Alumno</th><th style="background:#7a3a00;min-width:110px">Fecha</th><th style="background:#7a3a00;min-width:260px;text-align:left">Motivo del retardo</th></tr></thead><tbody>`;
-    tardDet.forEach((t,i)=>{html+=`<tr style="background:${i%2===0?'#fff8f0':'#fff3e8'}"><td style="font-weight:600;padding:5px 8px">${t.n}</td><td style="text-align:center;padding:5px 8px">${t.f}</td><td style="color:#7a3a00;font-style:italic;padding:5px 8px">${t.m}</td></tr>`;});
-    html+=`</tbody></table>`;
+    if(tardDet.length){
+      html+=`<br><p style="font-size:11pt;font-weight:bold;color:#7a3a00;margin:16px 0 8px">⏰ Detalle de Tardanzas</p><table style="width:auto"><thead><tr><th style="background:#7a3a00;min-width:180px;text-align:left">Alumno</th><th style="background:#7a3a00;min-width:110px">Fecha</th><th style="background:#7a3a00;min-width:260px;text-align:left">Motivo del retardo</th></tr></thead><tbody>`;
+      tardDet.forEach((t,i)=>{html+=`<tr style="background:${i%2===0?'#fff8f0':'#fff3e8'}"><td style="font-weight:600;padding:5px 8px">${escHtml(t.n)}</td><td style="text-align:center;padding:5px 8px">${t.f}</td><td style="color:#7a3a00;font-style:italic;padding:5px 8px">${escHtml(t.m)}</td></tr>`;});
+      html+=`</tbody></table>`;
+    }
   }
-  html+=`<p style="font-size:8.5pt;color:#999;margin-top:16px">✅ Presente &nbsp;❌ Ausente &nbsp;⏰ Tarde &nbsp;— &nbsp;Sin registro</p></body></html>`;
+  html+=`<p style="font-size:8.5pt;color:#999;margin-top:16px">✅ Presente &nbsp;❌ Ausente &nbsp;⏰ Tarde &nbsp;— &nbsp;Sin registro</p>`;
+  return html;
+}
+
+const _ASIST_REPORT_CSS = `
+  body{font-family:Arial,sans-serif;font-size:10pt;margin:0}
+  table{border-collapse:collapse}
+  th{background:#1a3a2a;color:white;font-weight:bold;padding:6px 8px;border:1px solid #aaa;text-align:center;font-size:8.5pt;vertical-align:bottom}
+  th.nh{background:#1a1a2e;text-align:left}
+  th.tot{background:#2a4a3a}
+  td{padding:5px 8px;border:1px solid #ddd;font-size:9pt;vertical-align:middle}
+  td.n{font-weight:600;color:#1a1a2e;background:#f8f6f0}
+  td.c{text-align:center;font-weight:600}
+  .tt{font-size:13pt;font-weight:bold;color:#1a1a2e;margin-bottom:3px}
+  .st{font-size:9.5pt;color:#555;margin-bottom:12px}
+`;
+
+function _asistImprimir(){
+  const datos=_asistLeerSeleccion();
+  if(datos.error){ showToast('❌ '+datos.error,'error'); return; }
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escHtml(datos.titulo)}</title>
+    <style>${_ASIST_REPORT_CSS} body{padding:16px} @page{size:letter landscape;margin:10mm} .no-print{display:none}</style></head>
+    <body>${_asistBuildReportHTML(datos)}
+    <div class="no-print" style="text-align:center;padding:14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Imprimir</button></div>
+    </body></html>`);
+  win.document.close();
+}
+
+function _generarExcelAsistencia(){
+  const datos=_asistLeerSeleccion();
+  if(datos.error){ showToast('❌ '+datos.error,'error'); return; }
+  const g=datos.g;
+
+  // Build Excel-compatible HTML table
+  let html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Asistencia</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><style>${_ASIST_REPORT_CSS}</style></head><body>${_asistBuildReportHTML(datos)}</body></html>`;
 
   const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;
-  a.download=`${archivo}_${g.name.replace(/[^a-z0-9]/gi,'_')}.xls`;
+  a.download=`${datos.archivo}_${g.name.replace(/[^a-z0-9]/gi,'_')}.xls`;
   a.click();URL.revokeObjectURL(url);
-  document.getElementById('exportAsistModal').remove();
+  const modal=document.getElementById('exportAsistModal'); if(modal) modal.remove();
   showToast('📊 Reporte Excel generado correctamente','success');
 }
 
