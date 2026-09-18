@@ -9293,26 +9293,57 @@ function _mostrarAyudaPermisosFirebase() {
 function fbGuardar() {
   if (FB.status !== 'connected' || !FB.ref) return false;
   try {
-    const payload = {
-      ...data,
-      _savedBy:  FB.deviceId,
-      _savedAt:  Date.now(),
-      _version:  '10.15',
-    };
-    FB.ref.set(payload).then(() => {
-      const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
-      FB.lastSync = hora;
-      FB.syncLog.unshift({ ts: hora, dir: 'enviado', device: FB.deviceId });
-      if (FB.syncLog.length > 20) FB.syncLog.pop();
-      _markClean(); // Firebase confirmó — todo está guardado
-      fbRefreshUI();
-    }).catch(e => {
-      const uid = (FB.auth && FB.auth.currentUser) ? FB.auth.currentUser.uid.slice(0,6)+'…' : 'sin sesión';
-      showToast('⚠️ Firebase (auth: ' + uid + '): ' + e.message + ' — datos guardados localmente', 'error');
-      _markDirty();
-    });
+    // Antes de subir, se revisa rápido si otro dispositivo guardó algo en la
+    // nube que este todavía no tiene (por ejemplo, si este equipo estuvo sin
+    // internet un rato). Sin este chequeo, "Guardar" podía sobreescribir
+    // silenciosamente cambios más recientes hechos desde otro dispositivo
+    // (la tablet, la página web, etc.) con una copia local desactualizada.
+    FB.ref.child('_savedAt').once('value').then(snapTs => {
+      const remoteTs = snapTs.val() || 0;
+      const localBaseline = data._lastKnownRemoteAt || data._savedAt || 0;
+      if (remoteTs > localBaseline) {
+        FB.ref.child('_savedBy').once('value').then(snapBy => {
+          const remoteBy = snapBy.val();
+          if (remoteBy && remoteBy !== FB.deviceId) {
+            const mins = Math.round((remoteTs - localBaseline) / 60000);
+            const traer = confirm(`⚠️ Hay cambios en la nube (de "${remoteBy}") de hace ${mins > 0 ? mins + ' min' : 'un momento'} que este dispositivo todavía no tiene.\n\nSi guardas ahora, esos cambios se perderían.\n\nPresiona Aceptar para TRAERLOS primero (recomendado).\nPresiona Cancelar para guardar de todos modos y sobreescribirlos.`);
+            if (traer) {
+              fbCargarDesdeNube(true, true);
+              showToast('☁️ Trajimos los cambios de la nube — revisa y vuelve a guardar', 'success');
+            } else {
+              _fbGuardarReal();
+            }
+          } else {
+            _fbGuardarReal();
+          }
+        }).catch(() => _fbGuardarReal());
+      } else {
+        _fbGuardarReal();
+      }
+    }).catch(() => _fbGuardarReal()); // si el chequeo falla, no bloquear el guardado
     return true;
   } catch(e) { return false; }
+}
+function _fbGuardarReal() {
+  const payload = {
+    ...data,
+    _savedBy:  FB.deviceId,
+    _savedAt:  Date.now(),
+    _version:  '10.15',
+  };
+  FB.ref.set(payload).then(() => {
+    const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    FB.lastSync = hora;
+    FB.syncLog.unshift({ ts: hora, dir: 'enviado', device: FB.deviceId });
+    if (FB.syncLog.length > 20) FB.syncLog.pop();
+    data._lastKnownRemoteAt = payload._savedAt; // ya sabemos qué hay en la nube ahora
+    _markClean(); // Firebase confirmó — todo está guardado
+    fbRefreshUI();
+  }).catch(e => {
+    const uid = (FB.auth && FB.auth.currentUser) ? FB.auth.currentUser.uid.slice(0,6)+'…' : 'sin sesión';
+    showToast('⚠️ Firebase (auth: ' + uid + '): ' + e.message + ' — datos guardados localmente', 'error');
+    _markDirty();
+  });
 }
 
 // ── Cargar datos desde la nube al abrir la app ───────────────────────────
@@ -9370,6 +9401,7 @@ function _fbAplicarRemoto(remote) {
     // Guardar localmente
     data = { ...remoteData };
     data._savedAt = _savedAt || Date.now();
+    data._lastKnownRemoteAt = data._savedAt; // ya sabemos qué hay en la nube ahora
     _migrateGroups();
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
 
@@ -9509,8 +9541,14 @@ function fbRefreshUI() {
       </button>
       <button onclick="fbCargarDesdeNube(true, true)"
         style="padding:6px 12px;background:#2a7a4b;color:white;border:none;border-radius:6px;
-               font-family:inherit;font-size:0.75rem;font-weight:700;cursor:pointer">
-        ☁️ Traer ahora
+               font-family:inherit;font-size:0.75rem;font-weight:700;cursor:pointer;margin-right:6px">
+        ⬇️ Traer de la nube
+      </button>
+      <button onclick="fbGuardar()"
+        style="padding:6px 12px;background:#2b579a;color:white;border:none;border-radius:6px;
+               font-family:inherit;font-size:0.75rem;font-weight:700;cursor:pointer"
+        title="Sube lo que tienes aquí a la nube. Si alguien más guardó algo nuevo que tú no tienes, te avisa antes de sobreescribirlo.">
+        ⬆️ Subir cambios
       </button>
     </div>
 
