@@ -7044,6 +7044,12 @@ let _asist = {
   lastScan:null, lastScanTs:0, camMode:true,
   fecha: new Date().toISOString().slice(0,10),
 };
+// Cuando true, el próximo renderAsistenciaTab() NO debe auto-iniciar la
+// cámara — se usa cuando el redibujado lo disparó un dato que llegó de
+// otro dispositivo (ej. la tablet), no una entrada real del usuario a la
+// pestaña. Sin esto, cada asistencia marcada desde la tablet encendía la
+// cámara de la PC sola.
+let _asistAutoCamSkip = false;
 function _asistKey(gid,f){return gid+'_'+f;}
 function _saveAsist(){data.asistencia=_asist.records;localStorage.setItem('regCalif_v3',JSON.stringify(data));}
 function _loadAsist(){if(!data.asistencia)data.asistencia={};_asist.records=data.asistencia;}
@@ -7187,8 +7193,19 @@ function renderAsistenciaTab(container){
       </div>
     </div>
   </div>`;
-  // Auto-iniciar cámara al entrar a la pestaña
-  if (_asist.camMode) { setTimeout(iniciarCamaraAsist, 300); }
+  // Auto-iniciar cámara al entrar a la pestaña — pero solo si de verdad es
+  // el usuario entrando (no un refresco por datos que llegaron de otro
+  // dispositivo), y sin volver a pedir permiso si ya estaba encendida.
+  const camaraYaActiva = _asist.scanActive && _asist.scanStream;
+  if (camaraYaActiva) {
+    const v = document.getElementById('asistVideo');
+    if (v) { v.srcObject = _asist.scanStream; v.play().catch(()=>{}); }
+    const vw=document.getElementById('asistVideoWrap');const bi=document.getElementById('btnIniciarCam');const bd=document.getElementById('btnDetenerCam');
+    if(vw)vw.style.display='block';if(bi)bi.style.display='none';if(bd)bd.style.display='flex';
+  } else if (_asist.camMode && !_asistAutoCamSkip) {
+    setTimeout(iniciarCamaraAsist, 300);
+  }
+  _asistAutoCamSkip = false;
 }
 
 function setAsist(sid,estado){
@@ -9235,7 +9252,7 @@ function _fbConectarBaseDatos() {
       data.asistencia = remoto;
       _asist.records = data.asistencia;
       try { localStorage.setItem('regCalif_v3', JSON.stringify(data)); } catch(e){}
-      if (currentTab === 'asistencia') renderTab();
+      if (currentTab === 'asistencia') { _asistAutoCamSkip = true; renderTab(); }
     });
 
     fbSetStatus('connected', 'Conectado');
