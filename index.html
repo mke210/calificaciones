@@ -9222,6 +9222,22 @@ function _fbConectarBaseDatos() {
       _fbAplicarRemoto(remote);
     });
 
+    // Escucha DEDICADA y SIN CONDICIONES solo para asistencia — no depende
+    // de comparar marcas de tiempo ni de todo lo demás en el documento.
+    // La asistencia que llega de la tablet (o cualquier otro dispositivo)
+    // se refleja de inmediato, siempre, sin excepciones ni ventanas de
+    // espera. Esto evita por completo los casos raros donde el listener
+    // de arriba decide no aplicar el cambio.
+    if (FB.asistListener) { try { FB.asistRef.off('value', FB.asistListener); } catch(e){} }
+    FB.asistRef = FB.db.ref(FB_DATA_PATH + '/asistencia');
+    FB.asistListener = FB.asistRef.on('value', snap => {
+      const remoto = snap.val() || {};
+      data.asistencia = remoto;
+      _asist.records = data.asistencia;
+      try { localStorage.setItem('regCalif_v3', JSON.stringify(data)); } catch(e){}
+      if (currentTab === 'asistencia') renderTab();
+    });
+
     fbSetStatus('connected', 'Conectado');
     fbRefreshUI();
   } catch(e) {
@@ -9453,9 +9469,10 @@ function fbSincronizacionForzada() {
 // ── Desconectar Firebase ───────────────────────────────────────────────────
 function fbDesconectar() {
   if (FB.listener && FB.ref) { try { FB.ref.off('value', FB.listener); } catch(e){} }
+  if (FB.asistListener && FB.asistRef) { try { FB.asistRef.off('value', FB.asistListener); } catch(e){} }
   if (FB.app) { try { FB.app.delete(); } catch(e){} }
-  FB.app = null; FB.db = null; FB.ref = null; FB.metaRef = null;
-  FB.status = 'idle'; FB.listener = null;
+  FB.app = null; FB.db = null; FB.ref = null; FB.metaRef = null; FB.asistRef = null;
+  FB.status = 'idle'; FB.listener = null; FB.asistListener = null;
   localStorage.removeItem(FB_CONFIG_KEY);
   FB.config = null;
   fbRefreshUI();
