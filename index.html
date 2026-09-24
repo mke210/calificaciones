@@ -7043,6 +7043,7 @@ let _asist = {
   records:{}, scanStream:null, scanAnim:null, scanActive:false,
   lastScan:null, lastScanTs:0, camMode:true,
   fecha: new Date().toISOString().slice(0,10),
+  ultimaSync: null,
 };
 // Cuando true, el próximo renderAsistenciaTab() NO debe auto-iniciar la
 // cámara — se usa cuando el redibujado lo disparó un dato que llegó de
@@ -7080,6 +7081,10 @@ function renderAsistenciaTab(container){
       <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:200px">
         <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;white-space:nowrap">📅 Fecha</label>
         <input type="date" id="asistFecha" value="${fecha}" style="border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;cursor:pointer" onchange="_asist.fecha=this.value;renderTab()">
+      </div>
+      <div title="Se actualiza sola cuando llega una marca de asistencia desde otro dispositivo (ej. la tablet)" style="font-size:0.72rem;color:${_asist.ultimaSync?'#2a7a4b':'#bbb'};font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:5px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${_asist.ultimaSync?'#2a7a4b':'#ccc'};flex-shrink:0"></span>
+        ${_asist.ultimaSync ? 'En vivo · ' + _asist.ultimaSync : 'Esperando datos en vivo…'}
       </div>
       <button onclick="marcarTodos('presente')" style="padding:6px 14px;background:#2a7a4b;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">✅ Todos presente</button>
       <button onclick="marcarTodos('ausente')"  style="padding:6px 14px;background:#c8422a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">❌ Todos ausente</button>
@@ -9216,8 +9221,16 @@ function _fbConectarBaseDatos() {
       if (online && FB.status !== 'connected') {
         fbSetStatus('connected', 'Conectado a Firebase');
         fbRefreshUI();
-        // Al reconectar: traer datos más recientes de la nube
-        fbCargarDesdeNube(false);
+        // NOTA: antes, aquí se llamaba a fbCargarDesdeNube(false) para traer
+        // lo último al reconectar — pero esa función puede abrir una
+        // ventana de confirmación (confirm()) que BLOQUEA todo el
+        // JavaScript de la página hasta que se cierra, incluyendo los
+        // listeners en tiempo real (el de asistencia entre ellos). Con
+        // wifi inestable, esto pasaba seguido y quedaba una ventana
+        // invisible/ignorada congelando la app — eso explicaba por qué a
+        // veces sí llegaba la asistencia en vivo y a veces no.
+        // FB.listener (abajo) ya se vuelve a sincronizar solo al
+        // reconectar, sin bloquear nada, así que ya no hace falta.
       } else if (!online && FB.status === 'connected') {
         fbSetStatus('loading', 'Reconectando…');
         fbRefreshUI();
@@ -9251,6 +9264,7 @@ function _fbConectarBaseDatos() {
       const remoto = snap.val() || {};
       data.asistencia = remoto;
       _asist.records = data.asistencia;
+      _asist.ultimaSync = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       try { localStorage.setItem('regCalif_v3', JSON.stringify(data)); } catch(e){}
       if (currentTab === 'asistencia') { _asistAutoCamSkip = true; renderTab(); }
     });
