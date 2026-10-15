@@ -1938,18 +1938,191 @@ function _alumnosSetFiltro(campo, val) {
 
 // Alumnos únicos de TODOS los grupos/clases, con su grado/grupo/sexo real
 // (misma lógica que usa Estadísticas y el Portal, para que concuerden).
-function _todosLosAlumnosUnicos() {
-  const vistos = new Set();
-  const out = [];
-  data.groups.forEach(g => {
-    (g.students || []).forEach(s => {
-      const key = s.qrCode || s.id;
-      if (vistos.has(key)) return;
-      vistos.add(key);
-      out.push({ s, g, grado: _alumnoGrado(s, g), grupo: _alumnoGrupo(s, g), sexo: _alumnoSexo(s) });
+// ── Identidad de alumno entre trimestres / clases ─────────────────────────
+// Cada trimestre guarda su PROPIA copia del alumno (distinto id interno, mismo
+// código ID). Para listar, borrar o exportar "una sola vez" a cada persona se
+// usan estas funciones — así no hay duplicados ni copias huérfanas.
+function _normNombre(n) {
+  return String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function _qrNorm(s) { return s && s.qrCode ? String(s.qrCode).trim().toUpperCase() : ''; }
+function _claveAlumno(s, g) {
+  return _alumnoGrado(s, g) + '|' + String(_alumnoGrupo(s, g) || '').toUpperCase() + '|' + _normNombre(s.name);
+}
+
+// Devuelve todas las copias [{g, s}] de un alumno.
+//  alcance 'clase' → solo en la misma clase (todos sus trimestres)
+//  alcance 'todo'  → en cualquier clase (mismo código ID, o mismo nombre+grado+grupo)
+function _copiasDeAlumno(s, g, alcance) {
+  const qr = _qrNorm(s), nn = _normNombre(s.name), clave = _claveAlumno(s, g);
+  const res = [];
+  (data.groups || []).forEach(g2 => {
+    const mismaClase = g2.name === g.name;
+    if (alcance === 'clase' && !mismaClase) return;
+    (g2.students || []).forEach(s2 => {
+      const mismoQr = qr && _qrNorm(s2) === qr;
+      const mismoNombreClase = mismaClase && _normNombre(s2.name) === nn;
+      const mismaClave = alcance === 'todo' && _claveAlumno(s2, g2) === clave;
+      if (s2 === s || mismoQr || mismoNombreClase || mismaClave) res.push({ g: g2, s: s2 });
     });
   });
+  return res;
+}
+
+// Quita UNA copia de alumno de un grupo, junto con todos sus datos.
+function _quitarAlumnoDeGrupo(g, sid) {
+  g.students = (g.students || []).filter(x => x.id !== sid);
+  Object.keys(g.grades || {}).forEach(k => { if (k.startsWith(sid + '_')) delete g.grades[k]; });
+  if (g.conduct) delete g.conduct[sid];
+  if (g.manualAvg) Object.keys(g.manualAvg).forEach(k => { if (k === sid || k.startsWith(sid + '_')) delete g.manualAvg[k]; });
+  if (g.hwStatus) Object.keys(g.hwStatus).forEach(k => { if (k.startsWith(sid + '_')) delete g.hwStatus[k]; });
+  // Asistencia: claves "{groupId}_{fecha}" → { sid: estado, sid_motivo: texto }
+  if (data.asistencia) {
+    Object.keys(data.asistencia).forEach(key => {
+      if (key.indexOf(g.id + '_') !== 0) return;
+      const dia = data.asistencia[key];
+      if (dia && typeof dia === 'object') { delete dia[sid]; delete dia[sid + '_motivo']; }
+    });
+  }
+}
+
+// Elimina un alumno de todas sus copias. Devuelve cuántas copias quitó.
+function _eliminarAlumnoEnCopias(copias) {
+  let n = 0;
+  copias.forEach(c => { if ((c.g.students || []).some(x => x.id === c.s.id)) { _quitarAlumnoDeGrupo(c.g, c.s.id); n++; } });
+  return n;
+}
+
+// Guarda sin tomar otra foto para deshacer (ya se tomó una ANTES del cambio).
+function _guardarSinSnapshot() {
+  data._savedAt = Date.now();
+  localStorage.setItem('regCalif_v3', JSON.stringify(data));
+  _markDirty();
+}
+
+// Lista de alumnos únicos (una fila por persona real).
+function _todosLosAlumnosUnicos() {
+  const porQr = new Map(), porClave = new Map();
+  const out = [];
+  (data.groups || []).forEach(g => {
+    (g.students || []).forEach(s => {
+      const qr = _qrNorm(s), clave = _claveAlumno(s, g);
+      let item = (qr && porQr.get(qr)) || porClave.get(clave);
+      if (!item) {
+        item = { s, g, grado: _alumnoGrado(s, g), grupo: _alumnoGrupo(s, g), sexo: _alumnoSexo(s),
+                 clases: new Set(), copias: 0, activos: 0, codigos: new Set() };
+        out.push(item);
+      }
+      if (qr) { porQr.set(qr, item); item.codigos.add(qr); }
+      porClave.set(clave, item);
+      item.clases.add(g.name);
+      item.copias++;
+      if (!s.inactive) item.activos++;
+    });
+  });
+  out.forEach(it => { it.baja = it.activos === 0; });
   return out;
+}
+
+// Índice limpio (una entrada por persona) para que el Portal u otras apps
+// lean alumnos sin duplicar por trimestre/clase.
+function _construirIndiceAlumnos() {
+  return _todosLosAlumnosUnicos().map(a => ({
+    id: a.s.qrCode || '', nombre: a.s.name, grado: a.grado || '', grupo: a.grupo || '',
+    sexo: a.sexo || '', clases: [...a.clases], baja: !!a.baja
+  }));
+}
+
+// ── Eliminar desde el menú Alumnos (quita al alumno de TODAS sus clases) ──
+function eliminarAlumnoGlobal(sid, gid) {
+  const g = data.groups.find(x => x.id === gid);
+  const s = g && g.students.find(x => x.id === sid);
+  if (!g || !s) { renderMain(); return; }
+  const copias = _copiasDeAlumno(s, g, 'todo');
+  const clases = [...new Set(copias.map(c => c.g.name))];
+  pendingConfirm = () => {
+    _snapshot();
+    const n = _eliminarAlumnoEnCopias(copias);
+    _guardarSinSnapshot(); renderSidebar(); renderMain();
+    showToast(`🗑️ "${s.name}" eliminado (${n} registro${n!==1?'s':''})`, 'success');
+  };
+  document.getElementById('confirmTitle').textContent = '🗑️ Eliminar Alumno';
+  document.getElementById('confirmMsg').textContent =
+    `¿Eliminar a "${s.name}" de TODAS sus clases y trimestres (${clases.join(', ')}) junto con sus calificaciones, conducta y asistencia? Esta acción quita ${copias.length} registro${copias.length!==1?'s':''}.`;
+  document.getElementById('confirmBtn').onclick = () => { pendingConfirm(); closeModal('modalConfirm'); };
+  openModal('modalConfirm');
+}
+
+// ── Limpiar duplicados: une copias del mismo alumno que tengan códigos ──
+// distintos y fusiona entradas repetidas dentro de un mismo grupo.
+function _analizarDuplicados() {
+  const rep = { mismoGrupo: [], codigos: [] };
+  // 1) Duplicados dentro de un mismo grupo (mismo nombre normalizado)
+  (data.groups || []).forEach(g => {
+    const vistos = new Map();
+    (g.students || []).forEach(s => {
+      const k = _normNombre(s.name) + '|' + _alumnoGrado(s, g) + '|' + String(_alumnoGrupo(s, g)).toUpperCase();
+      if (vistos.has(k)) rep.mismoGrupo.push({ g, keep: vistos.get(k), dup: s });
+      else vistos.set(k, s);
+    });
+  });
+  // 2) Misma persona (mismo nombre+grado+grupo) con códigos ID diferentes
+  const porClave = new Map();
+  (data.groups || []).forEach(g => (g.students || []).forEach(s => {
+    const k = _claveAlumno(s, g);
+    if (!porClave.has(k)) porClave.set(k, []);
+    porClave.get(k).push({ g, s });
+  }));
+  porClave.forEach((lista, k) => {
+    const codigos = [...new Set(lista.map(x => _qrNorm(x.s)).filter(Boolean))];
+    if (codigos.length > 1) rep.codigos.push({ lista, codigos });
+  });
+  return rep;
+}
+function limpiarDuplicadosAlumnos() {
+  const rep = _analizarDuplicados();
+  const nA = rep.mismoGrupo.length, nB = rep.codigos.length;
+  if (!nA && !nB) { showToast('✅ No se encontraron alumnos duplicados', 'success'); return; }
+  pendingConfirm = () => {
+    _snapshot();
+    // 1) Fusionar repetidos dentro del mismo grupo
+    rep.mismoGrupo.forEach(({ g, keep, dup }) => {
+      Object.keys(g.grades || {}).forEach(k => {
+        if (k.startsWith(dup.id + '_')) {
+          const nk = keep.id + k.slice(dup.id.length);
+          if (g.grades[nk] === undefined) g.grades[nk] = g.grades[k];
+        }
+      });
+      if (g.conduct && g.conduct[dup.id] && !g.conduct[keep.id]) g.conduct[keep.id] = g.conduct[dup.id];
+      if (g.hwStatus) Object.keys(g.hwStatus).forEach(k => {
+        if (k.startsWith(dup.id + '_')) { const nk = keep.id + k.slice(dup.id.length); if (g.hwStatus[nk] === undefined) g.hwStatus[nk] = g.hwStatus[k]; }
+      });
+      if (!keep.qrCode && dup.qrCode) keep.qrCode = dup.qrCode;
+      if (data.asistencia) Object.keys(data.asistencia).forEach(key => {
+        if (key.indexOf(g.id + '_') !== 0) return;
+        const dia = data.asistencia[key];
+        if (dia && dia[dup.id] !== undefined && dia[keep.id] === undefined) {
+          dia[keep.id] = dia[dup.id];
+          if (dia[dup.id + '_motivo'] !== undefined) dia[keep.id + '_motivo'] = dia[dup.id + '_motivo'];
+        }
+      });
+      _quitarAlumnoDeGrupo(g, dup.id);
+    });
+    // 2) Unificar el código ID (gana el más repetido; empate → el primero)
+    _analizarDuplicados().codigos.forEach(({ lista, codigos }) => {
+      const cuenta = {};
+      lista.forEach(x => { const c = _qrNorm(x.s); if (c) cuenta[c] = (cuenta[c] || 0) + 1; });
+      const ganador = codigos.slice().sort((a, b) => cuenta[b] - cuenta[a])[0];
+      lista.forEach(x => { x.s.qrCode = ganador; });
+    });
+    _guardarSinSnapshot(); renderMain();
+    showToast(`✅ Duplicados corregidos (${nA} repetidos fusionados, ${nB} códigos unificados)`, 'success');
+  };
+  document.getElementById('confirmTitle').textContent = '🧹 Limpiar duplicados';
+  document.getElementById('confirmMsg').textContent =
+    `Se encontraron ${nA} alumno${nA!==1?'s':''} repetido${nA!==1?'s':''} dentro de un mismo grupo y ${nB} alumno${nB!==1?'s':''} con códigos ID distintos entre trimestres/clases. Se fusionarán sin perder calificaciones. ¿Continuar?`;
+  document.getElementById('confirmBtn').onclick = () => { pendingConfirm(); closeModal('modalConfirm'); };
+  openModal('modalConfirm');
 }
 
 function renderAlumnosTab(container) {
@@ -1994,6 +2167,7 @@ function renderAlumnosTab(container) {
           <input id="alumnosBuscar" type="text" placeholder="🔍 Nombre o código ID…" oninput="_filtrarAlumnosTabla()"
             style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.85rem;font-family:'DM Sans',sans-serif;outline:none">
         </div>
+        <button onclick="limpiarDuplicadosAlumnos()" title="Fusiona alumnos repetidos y unifica sus códigos ID" style="padding:7px 12px;background:var(--cream);border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.8rem;font-weight:700;cursor:pointer;margin-bottom:1px">🧹 Limpiar duplicados</button>
         <div id="alumnosContador" style="font-size:0.8rem;color:#888;padding-bottom:8px;white-space:nowrap">${filtrados.length} de ${todos.length} alumno${todos.length!==1?'s':''}</div>
       </div>
       <div class="table-wrap">
@@ -2006,17 +2180,19 @@ function renderAlumnosTab(container) {
             <th style="width:60px;text-align:center">Sexo</th>
             <th style="width:120px;text-align:center">Código ID</th>
             <th style="min-width:150px">Clase</th>
+            <th style="width:48px;text-align:center"></th>
           </tr></thead>
           <tbody id="alumnosTablaBody">
             ${filtrados.map((a, i) => `
               <tr data-search="${escHtml((a.s.name + ' ' + (a.s.qrCode||'')).toLowerCase())}">
                 <td style="text-align:center;padding:6px 4px;font-size:0.82rem;font-weight:700;color:#aaa;background:#fafafa">${i+1}</td>
-                <td style="padding:6px 10px">${escHtml(a.s.name)}</td>
+                <td style="padding:6px 10px">${escHtml(a.s.name)}${a.baja?' <span style="background:#fde8e4;color:#c8422a;padding:1px 7px;border-radius:8px;font-size:0.68rem;font-weight:700">BAJA</span>':''}</td>
                 <td style="text-align:center;cursor:pointer" onclick="editGradoGrupo('${a.s.id}','${a.g.id}')" title="Clic para editar grado, grupo y sexo">${a.grado?a.grado+'°':'—'}</td>
                 <td style="text-align:center;cursor:pointer" onclick="editGradoGrupo('${a.s.id}','${a.g.id}')" title="Clic para editar grado, grupo y sexo">${a.grupo||'—'}</td>
                 <td style="text-align:center;cursor:pointer" onclick="editGradoGrupo('${a.s.id}','${a.g.id}')" title="Clic para editar grado, grupo y sexo">${a.sexo==='M'?'♂':a.sexo==='F'?'♀':'—'}</td>
                 <td style="text-align:center;cursor:pointer" onclick="editQRCode('${a.s.id}','${a.g.id}')" title="Clic para ver o cambiar el ID"><span style="background:#eef2fb;color:#3a5a9a;padding:2px 9px;border-radius:9px;font-weight:700;font-size:0.78rem;letter-spacing:0.03em">${escHtml(a.s.qrCode||'Sin ID')}</span></td>
-                <td style="color:#888;font-size:0.85rem">${escHtml(a.g.name)}</td>
+                <td style="color:#888;font-size:0.85rem">${escHtml([...a.clases].join(' · '))}</td>
+                <td style="text-align:center"><button onclick="eliminarAlumnoGlobal('${a.s.id}','${a.g.id}')" title="Eliminar alumno de todas sus clases" style="background:none;border:none;cursor:pointer;font-size:0.95rem;opacity:0.6">🗑️</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -5936,7 +6112,7 @@ function clearGradesConfirm()    { pendingConfirm=()=>{const g=currentGroup();g.
 function clearConductConfirm()   { pendingConfirm=()=>{const g=currentGroup();g.conduct={};autoSave();renderMain();showToast('Conducta eliminada','success');}; showConfirm('Borrar Conducta','¿Eliminar todos los registros de conducta?'); }
 function clearHWConfirm()        { pendingConfirm=()=>{const g=currentGroup();g.hwStatus={};autoSave();renderMain();showToast('Tareas eliminadas','success');}; showConfirm('Borrar Tareas','¿Eliminar todos los estados de entrega de tareas?'); }
 function clearActivitiesConfirm(){ pendingConfirm=()=>{const g=currentGroup();g.activities=[];g.grades={};g.hwStatus={};autoSave();renderMain();showToast('Actividades eliminadas','success');}; showConfirm('Borrar Actividades','¿Eliminar todas las actividades, calificaciones y tareas?'); }
-function clearStudentsConfirm()  { pendingConfirm=()=>{const g=currentGroup();g.students=[];g.grades={};g.conduct={};g.hwStatus={};autoSave();renderMain();showToast('Alumnos eliminados','success');}; showConfirm('Borrar Alumnos','¿Eliminar todos los alumnos y sus datos?'); }
+function clearStudentsConfirm()  { pendingConfirm=()=>{const g=currentGroup();const nombre=g.name;_snapshot();data.groups.filter(x=>x.name===nombre).forEach(x=>{(x.students||[]).slice().forEach(st=>_quitarAlumnoDeGrupo(x,st.id));x.students=[];x.grades={};x.conduct={};x.hwStatus={};});_guardarSinSnapshot();renderMain();showToast('Alumnos eliminados de todos los trimestres','success');}; showConfirm('Borrar Alumnos','¿Eliminar todos los alumnos y sus datos de "'+currentGroup().name+'" en los 3 trimestres?'); }
 function clearGroupConfirm()     { pendingConfirm=()=>{const g=currentGroup();g.students=[];g.activities=[];g.grades={};g.conduct={};g.hwStatus={};autoSave();renderMain();showToast('Grupo reiniciado','success');}; showConfirm('Reiniciar Grupo','¿Reiniciar completamente este grupo?'); }
 
 /* ── Fin de Ciclo Escolar: modal de vista previa + ejecución ── */
@@ -6662,15 +6838,19 @@ function toggleStudentActive(id) {
 }
 function deleteStudentConfirm(id){
   const g=currentGroup(); const s=g.students.find(x=>x.id===id);
+  if(!s) return;
+  // Un alumno existe una vez por trimestre dentro de la misma clase: se quita de todos
+  // para que no siga apareciendo en el menú Alumnos, en Asistencia ni en el Portal.
+  const copias=_copiasDeAlumno(s,g,'clase');
+  const nTrim=new Set(copias.map(c=>c.g.id)).size;
   pendingConfirm=()=>{
-    g.students=g.students.filter(x=>x.id!==id);
-    Object.keys(g.grades).forEach(k=>{if(k.startsWith(id+'_'))delete g.grades[k];});
-    if(g.conduct)delete g.conduct[id];
-    if(g.hwStatus)Object.keys(g.hwStatus).forEach(k=>{if(k.startsWith(id+'_'))delete g.hwStatus[k];});
-    autoSave(); renderMain();
+    _snapshot();
+    _eliminarAlumnoEnCopias(copias);
+    _guardarSinSnapshot(); renderMain();
+    showToast(`🗑️ "${s.name}" eliminado${nTrim>1?` de los ${nTrim} trimestres`:''}`,'success');
   };
   document.getElementById('confirmTitle').textContent='🗑️ Eliminar Alumno';
-  document.getElementById('confirmMsg').textContent=`¿Eliminar a "${s.name}" y todos sus datos?`;
+  document.getElementById('confirmMsg').textContent=`¿Eliminar a "${s.name}" y todos sus datos${nTrim>1?` de los ${nTrim} trimestres de "${g.name}"`:''}? (Si solo dejó de asistir, mejor márcalo como baja.)`;
   document.getElementById('confirmBtn').onclick=()=>{pendingConfirm();closeModal('modalConfirm');};
   openModal('modalConfirm');
 }
@@ -8499,6 +8679,8 @@ function guardarGradoGrupo(sid, gid){
   s.seccion = nuevoGrupo;
   s.grupo = nuevoGrupo; // mirror por compatibilidad
   s.gender = document.getElementById('ggSexoInput').value;
+  // Mantener iguales todas las copias del alumno (otros trimestres / clases)
+  _copiasDeAlumno(s, g, 'todo').forEach(c => { if (c.s !== s) { c.s.grado = s.grado; c.s.seccion = s.seccion; c.s.grupo = s.grupo; c.s.gender = s.gender; } });
   autoSave(); renderMain();
   const m=document.getElementById('gradoGrupoModal'); if(m) m.remove();
   showToast(`✓ ${s.name}: actualizado a ${s.grado}°${s.seccion} · ${s.gender==='M'?'♂':'♀'}`,'success');
@@ -9377,6 +9559,7 @@ function _fbGuardarReal() {
     _savedBy:  FB.deviceId,
     _savedAt:  Date.now(),
     _version:  '10.15',
+    alumnosUnicos: (function(){ try { return _construirIndiceAlumnos(); } catch(e) { return []; } })(),
   };
   FB.ref.set(payload).then(() => {
     const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
@@ -9442,7 +9625,7 @@ function fbCargarDesdeNube(mostrarToast = true, forzar = false) {
 // ── Aplicar datos remotos al estado local ─────────────────────────────────
 function _fbAplicarRemoto(remote) {
   try {
-    const { _savedBy, _savedAt, _version, ...remoteData } = remote;
+    const { _savedBy, _savedAt, _version, alumnosUnicos: _indiceIgnorado, ...remoteData } = remote;
     if (!remoteData.groups) return;
 
     // Guardar localmente
@@ -9482,7 +9665,7 @@ function fbSincronizacionForzada() {
     }
     // Borrar datos locales y aplicar remotos sin comparar fechas
     localStorage.removeItem('regCalif_v3');
-    const { _savedBy, _savedAt, _version, ...remoteData } = remote;
+    const { _savedBy, _savedAt, _version, alumnosUnicos: _indiceIgnorado, ...remoteData } = remote;
     data = { ...remoteData };
     data._savedAt = _savedAt || Date.now();
     _migrateGroups();
