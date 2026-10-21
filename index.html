@@ -917,40 +917,6 @@ var QRCode;
   }
   .btn-logout:hover { background: rgba(200,66,42,0.2); border-color: var(--accent-light); color: white; }
 
-  /* ── 🤖 Asistente de IA flotante ─────────────────────────────────────── */
-  #iaWidget{position:fixed;right:24px;bottom:24px;z-index:8000;user-select:none;display:none}
-  #iaWidget.ia-show{display:block}
-  #iaBubble{width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--accent) 0%,var(--accent-light) 100%);box-shadow:0 6px 20px rgba(200,66,42,0.4);display:flex;align-items:center;justify-content:center;font-size:1.6rem;cursor:grab;color:white;position:relative;transition:transform .15s}
-  #iaBubble:hover{transform:scale(1.06)}
-  #iaBubble:active{cursor:grabbing}
-  #iaBubble .ia-ping{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:var(--green);border:2px solid white}
-  #iaWindow{width:340px;max-width:92vw;height:480px;max-height:80vh;background:white;border-radius:14px;box-shadow:0 16px 50px rgba(0,0,0,0.28);display:flex;flex-direction:column;overflow:hidden;border:1.5px solid var(--border)}
-  #iaWindow.ia-hidden{display:none}
-  .ia-head{background:linear-gradient(135deg,var(--ink) 0%,var(--accent) 100%);padding:10px 10px 10px 14px;display:flex;align-items:center;gap:6px;cursor:grab;color:white}
-  .ia-head:active{cursor:grabbing}
-  .ia-head .ia-title{flex:1;font-family:'DM Serif Display',serif;font-size:.95rem;line-height:1.2}
-  .ia-head .ia-sub{font-size:.65rem;opacity:.6;margin-top:1px}
-  .ia-head button{background:rgba(255,255,255,0.12);border:none;color:white;width:27px;height:27px;border-radius:6px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .ia-head button:hover{background:rgba(255,255,255,0.25)}
-  .ia-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--paper)}
-  .ia-msg{max-width:82%;padding:8px 12px;border-radius:12px;font-size:.83rem;line-height:1.4;white-space:pre-wrap;word-break:break-word}
-  .ia-msg.user{align-self:flex-end;background:var(--accent);color:white;border-bottom-right-radius:3px}
-  .ia-msg.bot{align-self:flex-start;background:white;border:1.5px solid var(--border);color:var(--ink);border-bottom-left-radius:3px}
-  .ia-msg.thinking{opacity:.6;font-style:italic}
-  .ia-row{display:flex;gap:6px;padding:10px;border-top:1.5px solid var(--border);background:white}
-  .ia-row input{flex:1;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.83rem;outline:none;min-width:0}
-  .ia-row input:focus{border-color:var(--accent)}
-  .ia-mic{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:var(--cream);cursor:pointer;font-size:1rem;flex-shrink:0}
-  .ia-mic.on{background:var(--danger);border-color:var(--danger);color:white;animation:iaPulse 1s infinite}
-  .ia-send{width:36px;height:36px;border-radius:8px;border:none;background:var(--ink);color:white;cursor:pointer;font-size:1rem;flex-shrink:0}
-  @keyframes iaPulse{0%,100%{box-shadow:0 0 0 0 rgba(200,66,42,.5)}50%{box-shadow:0 0 0 8px rgba(200,66,42,0)}}
-  .ia-empty{text-align:center;color:#aaa;font-size:.78rem;padding:20px 10px}
-  .ia-toggle{position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0}
-  .ia-toggle input{opacity:0;width:0;height:0}
-  .ia-toggle .ia-tk-bg{position:absolute;inset:0;border-radius:24px;transition:.2s;cursor:pointer}
-  .ia-toggle .ia-tk-dot{position:absolute;top:3px;width:18px;height:18px;background:white;border-radius:50%;transition:.2s;pointer-events:none}
-  #iaBubble .ia-avatar-img, .ia-head .ia-avatar-img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;background:white}
-
   /* 🔍 Buscador flotante de alumnos */
   #buscWidget{position:fixed;left:24px;bottom:24px;z-index:7900;user-select:none;display:none}
   #buscWidget.busc-active{display:block}
@@ -983,10 +949,6 @@ var QRCode;
   .busc-flash-name{animation:buscFlashName 2s ease;border-radius:5px}
 </style>
 
-<script>
-// ── LZString micro-compressor (MIT) ──────────────────────────────────
-var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";var baseReverseDic={};function getBaseValue(alphabet,character){if(!baseReverseDic[alphabet]){baseReverseDic[alphabet]={};for(var i=0;i<alphabet.length;i++){baseReverseDic[alphabet][alphabet.charAt(i)]=i;}}return baseReverseDic[alphabet][character];}var LZString={compress:function(uncompressed){return LZString._compress(uncompressed,16,function(a){return f(a);});},_compress:function(uncompressed,bitsPerChar,getCharFromInt){if(uncompressed==null)return"";var i,value,context_dictionary={},context_dictionaryToCreate={},context_c="",context_wc="",context_w="",context_enlargeIn=2,context_dictSize=3,context_numBits=2,context_data=[],context_data_val=0,context_data_position=0,ii;for(ii=0;ii<uncompressed.length;ii+=1){context_c=uncompressed.charAt(ii);if(!Object.prototype.hasOwnProperty.call(context_dictionary,context_c)){context_dictionary[context_c]=context_dictSize++;context_dictionaryToCreate[context_c]=true;}context_wc=context_w+context_c;if(Object.prototype.hasOwnProperty.call(context_dictionary,context_wc)){context_w=context_wc;}else{if(Object.prototype.hasOwnProperty.call(context_dictionaryToCreate,context_w)){if(context_w.charCodeAt(0)<256){for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}value=context_w.charCodeAt(0);for(i=0;i<8;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}}else{value=1;for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|value;value=0;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}value=context_w.charCodeAt(0);for(i=0;i<16;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}delete context_dictionaryToCreate[context_w];context_dictionary[context_wc]=context_dictSize++;context_w=String(context_c);}else{value=context_dictionary[context_w];for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}context_dictionary[context_wc]=context_dictSize++;context_w=String(context_c);}}}if(context_w!==""){if(Object.prototype.hasOwnProperty.call(context_dictionaryToCreate,context_w)){if(context_w.charCodeAt(0)<256){for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}value=context_w.charCodeAt(0);for(i=0;i<8;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}}else{value=1;for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|value;value=0;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}value=context_w.charCodeAt(0);for(i=0;i<16;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}delete context_dictionaryToCreate[context_w];}else{value=context_dictionary[context_w];for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}}}value=2;for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|(value&1);value>>=1;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}while(true){context_data_val=(context_data_val<<1);if(context_data_position==bitsPerChar-1){context_data.push(getCharFromInt(context_data_val));break;}else{context_data_position++;}}return context_data.join('');},decompress:function(compressed){if(compressed==null)return"";if(compressed=="")return null;return LZString._decompress(compressed.length,32768,function(index){return compressed.charCodeAt(index);});},_decompress:function(length,resetValue,getNextValue){var dictionary=[],next,enlargeIn=4,dictSize=4,numBits=3,entry="",result=[],i,w,bits,resb,maxpower,power,c,data={val:getNextValue(0),position:resetValue,index:1};for(i=0;i<3;i+=1){dictionary[i]=i;}bits=0;maxpower=Math.pow(2,2);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}switch(next=bits){case 0:bits=0;maxpower=Math.pow(2,8);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}c=f(bits);break;case 1:bits=0;maxpower=Math.pow(2,16);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}c=f(bits);break;case 2:return"";}dictionary[3]=c;w=c;result.push(c);while(true){if(data.index>length){return"";}bits=0;maxpower=Math.pow(2,numBits);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}switch(c=bits){case 0:bits=0;maxpower=Math.pow(2,8);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}dictionary[dictSize++]=f(bits);c=dictSize-1;enlargeIn--;break;case 1:bits=0;maxpower=Math.pow(2,16);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}dictionary[dictSize++]=f(bits);c=dictSize-1;enlargeIn--;break;case 2:return result.join('');}if(enlargeIn==0){enlargeIn=Math.pow(2,numBits);numBits++;}if(dictionary[c]){entry=dictionary[c];}else{if(c===dictSize){entry=w+w.charAt(0);}else{return null;}}result.push(entry);dictionary[dictSize++]=w+entry.charAt(0);enlargeIn--;if(enlargeIn==0){enlargeIn=Math.pow(2,numBits);numBits++;}w=entry;}},compressToBase64:function(input){if(input==null)return"";var res=LZString._compress(input,6,function(a){return keyStrBase64.charAt(a);});switch(res.length%4){default:case 0:return res;case 1:return res+"===";case 2:return res+"==";case 3:return res+"=";}},decompressFromBase64:function(input){if(input==null)return"";if(input=="")return null;return LZString._decompress(input.length,32,function(index){return getBaseValue(keyStrBase64,input.charAt(index));});}};return LZString;})();
-</script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script></head>
 <body>
@@ -1051,33 +1013,6 @@ var LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJK
 </div>
 
 <div class="toast" id="toast">☁️ dev-65uug guardó cambios — app actualizada</div>
-
-<!-- 🧑‍🏫 Asistente de IA flotante -->
-<div id="iaWidget">
-  <div id="iaBubble" onmousedown="iaStartDrag(event)" ontouchstart="iaStartDrag(event)" onclick="iaOpenWindow(event)" title="Asistente IA">
-    <img class="ia-avatar-img" id="iaBubbleAvatar" alt="Asistente IA">
-    <span class="ia-ping" id="iaPing"></span>
-  </div>
-  <div id="iaWindow" class="ia-hidden">
-    <div class="ia-head" id="iaHead" onmousedown="iaStartDrag(event)" ontouchstart="iaStartDrag(event)">
-      <img class="ia-avatar-img" id="iaHeadAvatar" alt="Asistente IA" style="width:32px;height:32px;flex-shrink:0">
-      <div style="flex:1;min-width:0">
-        <div class="ia-title">Asistente IA</div>
-        <div class="ia-sub" id="iaModelLabel">GPT-OSS 120B</div>
-      </div>
-      <button onclick="iaToggleVoice()" id="iaVoiceBtn" title="Activar/desactivar voz">🔊</button>
-      <button onclick="iaMinimize()" title="Minimizar">—</button>
-    </div>
-    <div class="ia-log" id="iaLog">
-      <div class="ia-empty">Pregúntame algo sobre tus grupos: promedios, conducta, tareas pendientes, alumnos en riesgo…</div>
-    </div>
-    <div class="ia-row">
-      <button class="ia-mic" id="iaMicBtn" onclick="iaToggleMic()" title="Preguntar con voz">🎤</button>
-      <input type="text" id="iaInput" placeholder="Escribe o presiona 🎤…" onkeydown="if(event.key==='Enter')iaSend()">
-      <button class="ia-send" onclick="iaSend()" title="Enviar">➤</button>
-    </div>
-  </div>
-</div>
 
 <!-- 🔍 Buscador flotante de alumnos (pestaña Calificaciones) -->
 <div id="buscWidget">
@@ -1200,15 +1135,6 @@ let data = { groups: [] };
 // Ícono personalizado del logo (login y encabezado)
 const APP_LOGO_DATA_URI = 'data:image/png;base64,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';
 
-// Config del Asistente de IA — declarada aquí arriba para evitar errores de
-// "acceso antes de inicialización" cuando iaInit() se llama al arrancar la app.
-const IA_CONFIG_KEY = 'regCalif_ia_config_v1';
-const IA_POS_KEY = 'regCalif_ia_pos_v1';
-let IA = { apiKey:'', model:'openai/gpt-oss-120b', enabled:false, voice:true };
-// Modelos/proveedores que ya no se usan — si un usuario los tiene guardados de una
-// configuración anterior (Google Gemini, GitHub Models, OpenRouter), se limpian solos.
-const IA_RETIRED_MODELS = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-8b','gemini-1.5-pro','gemini-pro','gemini-3.5-flash','gemini-2.5-flash','gemini-3.1-flash-lite','gemini-2.5-flash-lite','openai/gpt-4o-mini','openai/gpt-4o','openai/gpt-4.1','openai/gpt-4.1-mini','openai/gpt-oss-20b:free','openai/gpt-oss-120b:free','llama-3.3-70b-versatile','llama-3.1-8b-instant','mixtral-8x7b-32768','llama3-70b-8192','llama3-8b-8192'];
-const IA_AVATAR_DATA_URI = 'data:image/png;base64,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';
 
 // ════════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN — Firebase Authentication (correo y contraseña)
@@ -1322,7 +1248,7 @@ async function doLogout() {
   // Subir cambios pendientes antes de salir (si hay conexión)
   try {
     if (typeof _hasUnsyncedChanges !== 'undefined' && _hasUnsyncedChanges && FB.ref && FB.status === 'connected') {
-      await FB.ref.set({ ...data, _savedBy: FB.deviceId, _savedAt: data._savedAt || Date.now(), _version: '10.15' });
+      await FB.ref.update({ ..._fbSinAsistencia(data), _savedBy: FB.deviceId, _savedAt: data._savedAt || Date.now(), _version: '10.15' });
     }
   } catch (e) {}
   try { if (FB.auth) await FB.auth.signOut(); } catch (e) {}
@@ -1827,7 +1753,7 @@ function _renderMainInner() {
   const g = currentGroup();
   const ts = g.students.length, ta = g.activities.length;
   let genAvg = '-';
-  if (ts > 0 && ta > 0) { let tot=0,cnt=0; g.students.forEach(s=>{const a=calcAvg(g,s.id);if(a!==null){tot+=a;cnt++;}}); genAvg = cnt>0?(tot/cnt).toFixed(1):'-'; }
+  if (ts > 0 && ta > 0) { let tot=0,cnt=0; g.students.forEach(s=>{const a=calcAvg(g,s.id);if(a!==null){tot+=a;cnt++;}}); genAvg = cnt>0?(Math.trunc((tot/cnt)*10)/10).toFixed(1):'-'; }
   let bestS = '-';
   if (ts > 0 && ta > 0) { let best=-1; g.students.forEach(s=>{const a=calcAvg(g,s.id);if(a!==null&&a>best){best=a;bestS=s.name;}}); }
   const conductIssues = g.students.filter(s=>(g.conduct[s.id]||{}).level>=3).length;
@@ -1840,6 +1766,7 @@ function _renderMainInner() {
         <button class="btn btn-secondary btn-sm" onclick="openAddGroup()">+ Grupo</button>
         <button class="btn btn-primary btn-sm" onclick="addStudentRow()">+ Alumno</button>
         <button class="btn btn-blue btn-sm" onclick="addActivity()">+ Actividad</button>
+        <button class="btn btn-orange btn-sm" onclick="abrirReporteAsesor()" title="Reporte de pendientes y conducta para el asesor de grupo">📋 Reporte asesor</button>
         <button class="btn btn-success btn-sm" onclick="saveAll()">💾 Guardar</button>
       </div>
     </div>
@@ -1955,7 +1882,7 @@ function renderGradesTab(container) {
   // Fila promedio general al fondo de columna Promedio (solo alumnos activos)
   let genSum=0, genCnt=0;
   g.students.forEach(s=>{ if(!s.inactive){const a=calcAvg(g,s.id);if(a!==null){genSum+=a;genCnt++;}} });
-  const genAvgVal = genCnt>0?(genSum/genCnt).toFixed(1):'-';
+  const genAvgVal = genCnt>0?(Math.trunc((genSum/genCnt)*10)/10).toFixed(1):'-';
   const genAvgCls = genCnt>0?gradeClass(parseFloat(genAvgVal)):'';
   const actCols = g.activities.length;
   html += `<tr style="background:#1a1a2e;">
@@ -3028,15 +2955,15 @@ function _imprimirReporteGrupo(seccion, trimestre, grado) {
     const statusColor = a.avg === null ? '#aaa' : a.avg >= PASS ? '#155724' : '#721c24';
     const pfColor = a.promFinal === null ? '#aaa' : a.promFinal >= PASS ? '#155724' : '#721c24';
     const pfBg    = a.promFinal === null ? '#f5f5f5' : a.promFinal >= PASS ? '#d4edda' : '#f8d7da';
-    const t1Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a1 !== null ? Math.round(a.a1) : '—'}</td>` : '';
-    const t2Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a2 !== null ? Math.round(a.a2) : '—'}</td>` : '';
-    const t3Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a3 !== null ? Math.round(a.a3) : '—'}</td>` : '';
+    const t1Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a1 !== null ? Math.trunc(a.a1) : '—'}</td>` : '';
+    const t2Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a2 !== null ? Math.trunc(a.a2) : '—'}</td>` : '';
+    const t3Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a3 !== null ? Math.trunc(a.a3) : '—'}</td>` : '';
     return `<tr style="background:${i%2===0?'white':'#f9f7f4'}">
       <td style="padding:6px 8px;color:#aaa;font-size:0.8rem;text-align:center">${i+1}</td>
       <td style="padding:6px 12px;font-weight:500">${escHtml(a.s.name)}</td>
       <td style="padding:6px 8px;text-align:center">${gen==='M'?'H':gen==='F'?'M':'?'}</td>
       ${t1Cell}${t2Cell}${t3Cell}
-      <td style="padding:6px 8px;text-align:center;font-weight:700;background:#f0f4ff">${a.avg !== null ? Math.round(a.avg) : '—'}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:700;background:#f0f4ff">${a.avg !== null ? Math.trunc(a.avg) : '—'}</td>
       <td style="padding:6px 8px;text-align:center;font-weight:800;background:${pfBg};color:${pfColor}">${a.promFinal !== null ? a.promFinal.toFixed(2) : '—'}</td>
       <td style="padding:6px 8px;text-align:center;color:${statusColor};font-weight:600;font-size:0.82rem">${status}</td>
     </tr>`;
@@ -3610,7 +3537,7 @@ function renderReporteFinal(container) {
   }
   function cell(v){
     if(v===null)return`<span style="color:#ccc;font-weight:500">—</span>`;
-    return`<span style="font-weight:700;font-size:1rem;color:${colorNum(v)}">${Math.round(v)}</span>`;
+    return`<span style="font-weight:700;font-size:1rem;color:${colorNum(v)}">${Math.trunc(v)}</span>`;
   }
   function fmtProm(v){
     if(v===null)return'—';
@@ -3836,866 +3763,6 @@ function printReporteFinal(){
 }
 
 // ---- SETTINGS TAB ----
-// ════════════════════════════════════════════════════════════════════
-// MÓDULO DE SINCRONIZACIÓN — Versión Optimizada
-// Estructura:
-//   1. renderSettingsTab()     → Pestaña principal de Ajustes
-//   2. Gestión de Datos        → exportData / importData / saveAll
-//   3. Sincronización QR       → Generación y escaneo bidireccional
-//   4. Lógica de fusión        → _aplicarSincDia / importarSincDia
-// ════════════════════════════════════════════════════════════════════
-
-// ════════════════════════════════════════════════════════════════════════════
-// MÓDULO DE SINCRONIZACIÓN P2P (PeerJS / WebRTC)
-// ════════════════════════════════════════════════════════════════════════════
-//
-// Flujo de uso:
-//   1. Primera vez: cada dispositivo muestra su "ID de par" (peerID).
-//      El usuario introduce el ID del otro dispositivo una sola vez.
-//   2. El ID del par remoto se guarda en localStorage.
-//   3. En sesiones posteriores la reconexión es automática.
-//   4. "Sincronizar ahora" envía SOLO las calificaciones del grupo actual.
-//   5. El receptor fusiona los datos y guarda localmente.
-//
-// Tecnología: PeerJS (WebRTC DataChannel con señalización en la nube)
-// Sin servidor propio, sin instalaciones, solo Chrome/Edge en WiFi o internet.
-// ════════════════════════════════════════════════════════════════════════════
-
-// ── Estado global del módulo P2P ─────────────────────────────────────────
-const P2P = {
-  peer:       null,   // instancia PeerJS
-  conns:      [],     // POOL de DataConnections activas (puede haber >1 por doble-connect)
-  conn:       null,   // alias de conveniencia → primera conexión abierta del pool
-  myId:       null,
-  remoteId:   null,
-  status:     'idle',
-  lastSync:   null,
-  autoRetry:  null,
-  autoSync:   true,
-  syncLog:    [],     // historial de sincronizaciones [{ts, dir, n, from}]
-};
-
-// Devuelve la primera conexión abierta del pool (la usamos para enviar)
-function _p2pGetOpenConn() {
-  return P2P.conns.find(c => c && c.open) || null;
-}
-
-const P2P_STORAGE_KEY = 'regCalif_p2p_v1'; // clave en localStorage
-
-// ── Persistencia del estado P2P ──────────────────────────────────────────
-// Detecta si un ID tiene el formato nuevo corto (rc-xxxxx)
-function _p2pIdValido(id) {
-  return typeof id === 'string' && /^rc-[a-z0-9]{5}$/.test(id);
-}
-
-function p2pLoadState() {
-  try {
-    const s = JSON.parse(localStorage.getItem(P2P_STORAGE_KEY) || '{}');
-    // Si el ID guardado es un UUID viejo (formato largo), descartarlo
-    P2P.myId     = _p2pIdValido(s.myId)     ? s.myId     : null;
-    P2P.remoteId = _p2pIdValido(s.remoteId) ? s.remoteId : null;
-    P2P.lastSync = s.lastSync || null;
-    P2P.autoSync = s.autoSync !== false;
-    P2P.syncLog  = s.syncLog  || [];
-    // Limpiar storage si habia IDs viejos
-    if (s.myId && !_p2pIdValido(s.myId)) {
-      console.info('[P2P] ID antiguo detectado y descartado:', s.myId);
-      localStorage.removeItem(P2P_STORAGE_KEY);
-    }
-  } catch(e) {}
-}
-
-function p2pSaveState() {
-  localStorage.setItem(P2P_STORAGE_KEY, JSON.stringify({
-    myId:     P2P.myId,
-    remoteId: P2P.remoteId,
-    lastSync: P2P.lastSync,
-    autoSync: P2P.autoSync,
-    syncLog:  P2P.syncLog.slice(-20), // max 20 entradas
-  }));
-}
-
-// ── Cargar PeerJS desde CDN (lazy) ───────────────────────────────────────
-function _cargarPeerJS(cb) {
-  if (window.Peer) { cb(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
-  s.onload  = () => cb();
-  s.onerror = () => {
-    // Espejo alternativo
-    const s2 = document.createElement('script');
-    s2.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js';
-    s2.onload  = () => cb();
-    s2.onerror = () => { p2pSetStatus('error', 'Sin internet para cargar PeerJS'); };
-    document.head.appendChild(s2);
-  };
-  document.head.appendChild(s);
-}
-
-// ── Inicializar PeerJS ────────────────────────────────────────────────────
-// ── Generar ID corto propio (8 chars alfanuméricos) ───────────────────────
-// Prefijo 'rc' para evitar colisión con IDs genéricos del servidor PeerJS.
-// El ID se persiste en localStorage y se reclama siempre al conectar.
-function _p2pGenerarId() {
-  const chars = 'abcdefghjkmnpqrstuvwxyz23456789'; // sin letras/números ambiguos
-  let id = 'rc-';
-  for (let i = 0; i < 5; i++) id += chars[Math.floor(Math.random() * chars.length)];
-  return id; // ej: "rc-k7m3x"
-}
-
-function p2pInit() {
-  p2pLoadState();
-  p2pSetStatus('loading', 'Cargando módulo de conexión…');
-
-  // Generar ID propio corto si aún no existe (o si el guardado era un UUID viejo)
-  const esNuevoId = !P2P.myId;
-  if (!P2P.myId) {
-    P2P.myId = _p2pGenerarId();
-    p2pSaveState();
-  }
-
-  _cargarPeerJS(() => {
-    _p2pCrearPeer(P2P.myId);
-    // Si se generó un ID nuevo, avisar que hay que volver a conectar
-    if (esNuevoId) {
-      setTimeout(() => {
-        showToast('🆕 ID nuevo generado: ' + P2P.myId + ' — compártelo con el otro dispositivo', 'success');
-      }, 1500);
-    }
-  });
-}
-
-// Crear instancia PeerJS con un ID dado (se separa para poder reintentar con ID nuevo)
-// Intenta 3 configuraciones de servidor en secuencia si la anterior falla.
-const _P2P_SERVERS = [
-  // 1. Broker público de PeerJS
-  { host: '0.peerjs.com', port: 443, secure: true, path: '/' },
-  // 2. Espejo alternativo conocido
-  { host: 'peerjs.92k.de',  port: 443, secure: true, path: '/' },
-  // 3. Sin host especificado → PeerJS Cloud (default)
-  null,
-];
-let _p2pServerIdx = 0;
-
-function _p2pCrearPeer(peerId) {
-  // Destruir instancia previa si existe
-  if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
-
-  const iceServers = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-  ];
-
-  const serverCfg = _P2P_SERVERS[_p2pServerIdx] || _P2P_SERVERS[0];
-  const peerOpts = {
-    debug: 0,
-    config: { iceServers },
-  };
-  if (serverCfg) {
-    Object.assign(peerOpts, { host: serverCfg.host, port: serverCfg.port, secure: serverCfg.secure, path: serverCfg.path });
-  }
-
-  try {
-    P2P.peer = new Peer(peerId, peerOpts);
-  } catch(e) {
-    p2pSetStatus('error', 'No se pudo crear el par: ' + e.message);
-    p2pRefreshUI();
-    return;
-  }
-
-  // Timeout: si en 12 s no abre, probar siguiente servidor
-  const openTimeout = setTimeout(() => {
-    if (P2P.status !== 'connected' && P2P.status !== 'ready') {
-      _p2pServerIdx = (_p2pServerIdx + 1) % _P2P_SERVERS.length;
-      p2pSetStatus('loading', 'Servidor lento · Probando alternativo…');
-      p2pRefreshUI();
-      if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
-      setTimeout(() => _p2pCrearPeer(peerId), 500);
-    }
-  }, 12000);
-
-  P2P.peer.on('open', id => {
-    clearTimeout(openTimeout);
-    _p2pServerIdx = 0; // reset para próxima vez
-    P2P.myId = id;
-    p2pSaveState();
-    p2pSetStatus('ready', 'Listo · ID: ' + id);
-    p2pRefreshUI();
-    if (P2P.remoteId) p2pConectar(P2P.remoteId);
-  });
-
-  P2P.peer.on('connection', conn => {
-    clearTimeout(openTimeout);
-    _p2pConfigConn(conn);
-    p2pSetStatus('connected', 'Conectado con ' + conn.peer);
-    p2pRefreshUI();
-  });
-
-  P2P.peer.on('error', err => {
-    clearTimeout(openTimeout);
-    if (err.type === 'peer-unavailable') {
-      p2pSetStatus('ready', 'Par remoto no disponible aún · Reintentando…');
-      p2pScheduleRetry();
-    } else if (err.type === 'unavailable-id') {
-      // El ID corto está ocupado → generar uno nuevo y reconectar
-      P2P.myId = _p2pGenerarId();
-      p2pSaveState();
-      p2pSetStatus('loading', 'ID ocupado · Obteniendo uno nuevo…');
-      p2pRefreshUI();
-      setTimeout(() => _p2pCrearPeer(P2P.myId), 800);
-      return;
-    } else if (err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error') {
-      // Problema de servidor → intentar siguiente
-      _p2pServerIdx = (_p2pServerIdx + 1) % _P2P_SERVERS.length;
-      p2pSetStatus('loading', 'Error de servidor · Probando alternativo…');
-      p2pRefreshUI();
-      if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
-      setTimeout(() => _p2pCrearPeer(peerId), 1500);
-      return;
-    } else {
-      p2pSetStatus('error', 'Error: ' + (err.message || err.type));
-      p2pScheduleRetry();
-    }
-    p2pRefreshUI();
-  });
-
-  P2P.peer.on('disconnected', () => {
-    p2pSetStatus('ready', 'Desconectado del servidor · Reconectando…');
-    try { P2P.peer.reconnect(); } catch(e) { setTimeout(() => _p2pCrearPeer(P2P.myId), 2000); }
-  });
-
-  P2P.peer.on('close', () => {
-    p2pSetStatus('idle', 'Conexión cerrada');
-    p2pRefreshUI();
-  });
-}
-
-// ── Conectar al dispositivo remoto (rol: iniciador) ──────────────────────
-// Solo el dispositivo que ingresó el ID del otro inicia la conexión outbound.
-// El receptor simplemente acepta la conexión en peer.on('connection').
-function p2pConectar(remoteId) {
-  if (!remoteId || !P2P.peer) return;
-  remoteId = remoteId.trim();
-  if (!remoteId) return;
-
-  // Cerrar conexión previa si existe
-  if (P2P.conn) { try { P2P.conn.close(); } catch(e){} P2P.conn = null; }
-
-  P2P.remoteId = remoteId;
-  p2pSaveState();
-  p2pSetStatus('connecting', 'Conectando con ' + remoteId + '…');
-  p2pRefreshUI();
-
-  const conn = P2P.peer.connect(remoteId, {
-    reliable:      true,
-    serialization: 'raw',
-    label:         'sync',
-  });
-  _p2pConfigConn(conn);
-}
-
-// ── Configurar DataConnection — registra en el pool ──────────────────────
-function _p2pConfigConn(conn) {
-  // Evitar duplicados en el pool
-  if (!P2P.conns.includes(conn)) P2P.conns.push(conn);
-  P2P.conn = conn; // alias para compatibilidad
-
-  conn.on('open', () => {
-    if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
-    P2P.remoteId = conn.peer;
-    p2pSaveState();
-    p2pSetStatus('connected', 'Conectado · ' + conn.peer);
-    p2pRefreshUI();
-    showToast('🔗 Dispositivo conectado', 'success');
-  });
-
-  conn.on('data', raw => {
-    let payload = null;
-    if (typeof raw === 'object' && raw !== null) {
-      payload = raw;
-    } else if (typeof raw === 'string') {
-      if (raw.startsWith('P2P:')) {
-        try { payload = JSON.parse(LZString.decompressFromBase64(raw.slice(4))); }
-        catch(e) { showToast('Error al descomprimir: ' + e.message, 'error'); }
-      } else {
-        try { payload = JSON.parse(raw); } catch(e) {}
-      }
-    }
-    if (!payload) return;
-    if (payload.type === 'request_all') { _p2pResponderPeticion(); return; }
-    _p2pAplicarPayload(payload);
-  });
-
-  conn.on('close', () => {
-    // Eliminar del pool al cerrar
-    P2P.conns = P2P.conns.filter(c => c !== conn);
-    P2P.conn  = _p2pGetOpenConn();
-    if (!P2P.conn) {
-      p2pSetStatus('ready', 'Desconectado del par');
-      p2pRefreshUI();
-      if (P2P.remoteId) p2pScheduleRetry();
-    }
-  });
-
-  conn.on('error', err => {
-    P2P.conns = P2P.conns.filter(c => c !== conn);
-    P2P.conn  = _p2pGetOpenConn();
-    p2pSetStatus('error', 'Error de conexión: ' + err.message);
-    p2pRefreshUI();
-  });
-}
-
-// ── Reintentar conexión automáticamente ──────────────────────────────────
-function p2pScheduleRetry(delayMs = 8000) {
-  if (P2P.autoRetry) clearTimeout(P2P.autoRetry);
-  if (!P2P.remoteId) return;
-  P2P.autoRetry = setTimeout(() => {
-    if (P2P.status !== 'connected' && P2P.remoteId) {
-      p2pConectar(P2P.remoteId);
-    }
-  }, delayMs);
-}
-
-// ── Envío automático: una calificación puntual ────────────────────────────
-// Llamado desde saveGradeFromPopup cuando autoSync está activo.
-// Envía SOLO la calificación modificada (payload mínimo).
-function p2pEnviarCalificacion(groupId, key, value) {
-  if (!P2P.autoSync || !_p2pGetOpenConn()) return;
-
-  const g = data.groups.find(x => x.id === groupId);
-  if (!g) return;
-
-  const miniSync = {
-    version: 'sync_v1',
-    fecha: new Date().toISOString().slice(0, 10),
-    grupos: {
-      [groupId]: {
-        id: groupId, name: g.name, subject: g.subject || '',
-        students: g.students,
-        grades:   { [key]: value },
-        hwStatus: {}, conduct: {}, asistencia: {},
-      }
-    },
-    totalCambios: 1,
-  };
-
-  const json = JSON.stringify({
-    type: 'sync_grades', version: 'sync_v1',
-    timestamp: Date.now(), sender: P2P.myId, sync: miniSync,
-  });
-
-  if (_p2pSend({ type: 'sync_grades', version: 'sync_v1',
-                 timestamp: Date.now(), sender: P2P.myId, sync: miniSync })) {
-    P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-    p2pSaveState();
-    const dot = document.getElementById('p2pStatusDot');
-    if (dot) { dot.style.background = '#ffffff'; setTimeout(() => { dot.style.background = '#22cc55'; }, 200); }
-    const lastEl = document.getElementById('p2pLastSyncLabel');
-    if (lastEl) lastEl.textContent = '✅ Último envío: ' + P2P.lastSync;
-  }
-}
-
-// ── Toggle auto-sync desde Ajustes ───────────────────────────────────────
-function p2pToggleAutoSync() {
-  P2P.autoSync = !P2P.autoSync;
-  p2pSaveState();
-  p2pRefreshUI();
-  showToast(P2P.autoSync ? '🟢 Sincronización al guardar: activada' : '⏸ Sincronización al guardar: desactivada', 'success');
-}
-
-// ── Enviar calificaciones al par ──────────────────────────────────────────
-function p2pSincronizarAhora() {
-  if (!_p2pGetOpenConn()) {
-    showToast('⚠️ Sin conexión activa — verifica que el otro dispositivo esté abierto', 'error');
-    return;
-  }
-
-  const sync = _getSyncHoy();
-  const totalCambios = sync.totalCambios || 0;
-
-  if (totalCambios === 0 && Object.keys(sync.grupos).length === 0) {
-    showToast('No hay calificaciones para sincronizar', 'error');
-    return;
-  }
-
-  // Enviar usando función unificada (maneja raw y json automáticamente)
-  const payloadObj = { type: 'sync_grades', version: 'sync_v1',
-                       timestamp: Date.now(), sender: P2P.myId, sync };
-  if (_p2pSend(payloadObj)) {
-    P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
-    p2pSaveState();
-    showToast(`📤 ${totalCambios} calificaciones de hoy enviadas`, 'success');
-    p2pRefreshUI();
-  } else {
-    showToast('Error al enviar — reconecta los dispositivos', 'error');
-  }
-}
-
-// ── Enviar TODAS las calificaciones (sin filtro de fecha) ─────────────────
-// Úsalo cuando la laptop no tiene datos que sí existen en la tablet.
-function p2pEnviarTodo() {
-  if (!_p2pGetOpenConn()) {
-    showToast('⚠️ Sin conexión activa — verifica que el otro dispositivo esté abierto', 'error');
-    return;
-  }
-
-  // Construir payload completo con TODOS los grupos y TODAS las calificaciones
-  const syncCompleto = {
-    version: 'sync_v1',
-    fecha:   new Date().toISOString().slice(0, 10),
-    grupos:  {},
-    totalCambios: 0,
-  };
-
-  data.groups.forEach(g => {
-    const totalGrupo = Object.keys(g.grades || {}).length;
-    syncCompleto.grupos[g.id] = {
-      id:        g.id,
-      name:      g.name,
-      subject:   g.subject || '',
-      students:  g.students,
-      grades:    { ...g.grades },
-      hwStatus:  { ...g.hwStatus },
-      conduct:   { ...g.conduct },
-      asistencia: {},
-    };
-    syncCompleto.totalCambios += totalGrupo;
-  });
-
-  if (syncCompleto.totalCambios === 0) {
-    showToast('No hay calificaciones registradas para enviar', 'error');
-    return;
-  }
-
-  const payloadObj = {
-    type: 'sync_grades', version: 'sync_v1',
-    timestamp: Date.now(), sender: P2P.myId,
-    sync: syncCompleto,
-  };
-
-  if (_p2pSend(payloadObj)) {
-    P2P.lastSync = new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
-    p2pSaveState();
-    const nGrupos = Object.keys(syncCompleto.grupos).length;
-    showToast(`📤 ${syncCompleto.totalCambios} calificaciones · ${nGrupos} grupos enviados`, 'success');
-    p2pRefreshUI();
-  } else {
-    showToast('Error al enviar — reconecta los dispositivos', 'error');
-  }
-}
-
-// ── La tablet responde a una petición de la laptop ────────────────────────
-// Se ejecuta automáticamente cuando llega type:'request_all'
-function _p2pResponderPeticion() {
-  const syncCompleto = { version:'sync_v1', fecha: new Date().toISOString().slice(0,10),
-                         grupos:{}, totalCambios:0 };
-  data.groups.forEach(g => {
-    const n = Object.keys(g.grades||{}).length;
-    syncCompleto.grupos[g.id] = {
-      id:g.id, name:g.name, subject:g.subject||'', students:g.students,
-      grades:{...g.grades}, hwStatus:{...g.hwStatus},
-      conduct:{...g.conduct}, asistencia:{},
-    };
-    syncCompleto.totalCambios += n;
-  });
-  _p2pSend({ type:'sync_grades', version:'sync_v1',
-             timestamp:Date.now(), sender:P2P.myId, sync:syncCompleto });
-  showToast(`📤 Tablet envió ${syncCompleto.totalCambios} calificaciones`, 'success');
-}
-
-// ── La laptop pide los datos a la tablet ──────────────────────────────────
-// Un solo botón: la laptop envía la petición y espera la respuesta.
-function p2pPedirDatos() {
-  if (!_p2pGetOpenConn()) {
-    showToast('⚠️ Sin conexión — abre la app en la tablet primero', 'error');
-    return;
-  }
-  _p2pSend({ type:'request_all', sender:P2P.myId, timestamp:Date.now() });
-  showToast('📡 Solicitando datos a la tablet…', 'success');
-}
-
-// ── Aplicar payload recibido (independiente del formato de transporte) ────
-function _p2pAplicarPayload(payload) {
-  if (!payload || payload.type !== 'sync_grades') return;
-
-  try {
-    _aplicarSincDia(payload.sync);
-    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-    P2P.lastSync = hora;
-    // Registrar en el log
-    const nGrupos = Object.keys(payload.sync.grupos || {}).length;
-    const from = payload.senderLabel || payload.sender || 'otro dispositivo';
-    P2P.syncLog.push({
-      ts: hora,
-      dir: 'recibido',
-      n: payload.sync.totalCambios || 0,
-      grupos: nGrupos,
-      from,
-    });
-    p2pSaveState();
-    p2pRefreshUI();
-    // Refrescar la vista si está en calificaciones o ajustes
-    if (currentTab === 'calificaciones' || currentTab === 'ajustes') {
-      renderTab();
-    }
-    const lastEl = document.getElementById('p2pLastSyncLabel');
-    if (lastEl) lastEl.textContent = '✅ Última sync: ' + hora;
-    showToast(`📥 ${from} guardó y sincronizó ${nGrupos} grupo(s)`, 'success');
-  } catch(e) {
-    showToast('Error al aplicar datos: ' + e.message, 'error');
-  }
-}
-
-// ── Función de envío unificada — usa cualquier conexión abierta del pool ──
-function _p2pSend(payloadObj) {
-  const conn = _p2pGetOpenConn();
-  if (!conn) return false;
-  try {
-    const compressed = 'P2P:' + LZString.compressToBase64(JSON.stringify(payloadObj));
-    conn.send(compressed);
-    return true;
-  } catch(e) {
-    try { conn.send(payloadObj); return true; } catch(e2) {}
-    return false;
-  }
-}
-
-// ── Enviar TODAS las calificaciones al hacer clic en GUARDAR ─────────────
-// Nueva función principal: se llama desde saveAll() cuando hay conexión activa.
-function _p2pEnviarAlGuardar() {
-  const syncCompleto = {
-    version: 'sync_v1',
-    fecha:   new Date().toISOString().slice(0, 10),
-    grupos:  {},
-    totalCambios: 0,
-  };
-
-  data.groups.forEach(g => {
-    const nGrades = Object.keys(g.grades || {}).length;
-    syncCompleto.grupos[g.id] = {
-      id: g.id, name: g.name, subject: g.subject || '',
-      students:  g.students,
-      grades:    { ...g.grades },
-      hwStatus:  { ...g.hwStatus },
-      conduct:   { ...g.conduct },
-      asistencia: {},
-    };
-    syncCompleto.totalCambios += nGrades;
-  });
-
-  const payloadObj = {
-    type: 'sync_grades', version: 'sync_v1',
-    timestamp: Date.now(), sender: P2P.myId,
-    senderLabel: P2P.myId || 'Este dispositivo',
-    sync: syncCompleto,
-  };
-
-  if (_p2pSend(payloadObj)) {
-    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-    P2P.lastSync = hora;
-    // Agregar al log
-    P2P.syncLog.push({
-      ts: hora,
-      dir: 'enviado',
-      n: syncCompleto.totalCambios,
-      grupos: Object.keys(syncCompleto.grupos).length,
-    });
-    p2pSaveState();
-    p2pRefreshUI();
-    const nG = Object.keys(syncCompleto.grupos).length;
-    showToast(`💾 Guardado · 📤 Enviado a ${P2P.remoteId || 'dispositivo conectado'} (${nG} grupos)`, 'success');
-  } else {
-    showToast('💾 Guardado localmente · ⚠️ Sin conexión para sincronizar', 'success');
-  }
-}
-
-
-// ── Desconectar y olvidar el ID remoto ───────────────────────────────────
-function p2pDesconectar() {
-  if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
-  P2P.conns.forEach(c => { try { c.close(); } catch(e){} });
-  P2P.conns = [];
-  P2P.conn  = null;
-  if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
-  P2P.remoteId = null;
-  P2P.myId     = null;
-  P2P.status   = 'idle';
-  p2pSaveState();
-  p2pRefreshUI();
-  showToast('Sincronización desactivada', 'success');
-}
-
-// ── Guardar ID remoto ingresado manualmente ───────────────────────────────
-function p2pGuardarIdRemoto() {
-  const input = document.getElementById('p2pRemoteIdInput');
-  if (!input) return;
-  const val = input.value.trim();
-  if (!val) { showToast('Ingresa el ID del otro dispositivo', 'error'); return; }
-  if (val === P2P.myId) { showToast('No puedes conectarte a ti mismo', 'error'); return; }
-  p2pConectar(val);
-}
-
-// ── Copiar propio ID al portapapeles ─────────────────────────────────────
-function p2pCopiarMiId() {
-  if (!P2P.myId) return;
-  navigator.clipboard.writeText(P2P.myId).then(() => {
-    showToast('ID copiado al portapapeles', 'success');
-  }).catch(() => {
-    // Fallback
-    const ta = document.createElement('textarea');
-    ta.value = P2P.myId;
-    document.body.appendChild(ta);
-    ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast('ID copiado', 'success');
-  });
-}
-
-// ── Estado visual ────────────────────────────────────────────────────────
-function p2pSetStatus(status, msg) {
-  P2P.status = status;
-  P2P._statusMsg = msg;
-}
-
-// ── Actualizar la UI de sincronización ───────────────────────────────────
-function p2pRefreshUI() {
-  const panel = document.getElementById('p2pStatusPanel');
-  if (!panel) return;
-
-  const statusInfo = {
-    idle:       { color: '#888',    bg: '#f5f5f5',  icon: '⚪', label: 'Inactivo' },
-    loading:    { color: '#b85c00', bg: '#fff8f0',  icon: '⏳', label: 'Cargando…' },
-    ready:      { color: '#5a6e00', bg: '#f5fff0',  icon: '🟡', label: 'Esperando conexión' },
-    connecting: { color: '#2a4a9a', bg: '#f0f4ff',  icon: '🔄', label: 'Conectando…' },
-    connected:  { color: '#155724', bg: '#e8f8ee',  icon: '🟢', label: 'Conectado' },
-    error:      { color: '#7a1010', bg: '#fff0f0',  icon: '🔴', label: 'Error' },
-  };
-  const si = statusInfo[P2P.status] || statusInfo.idle;
-  const connected = P2P.status === 'connected' && !!_p2pGetOpenConn();
-  const hasRemote = !!P2P.remoteId;
-  const myId      = P2P.myId || '—';
-
-  // Generar historial de sincronizaciones
-  const logHTML = P2P.syncLog.length ? P2P.syncLog.slice().reverse().slice(0,6).map(entry => {
-    const isEnv = entry.dir === 'enviado';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f0f0">
-      <span style="font-size:0.88rem">${isEnv ? '📤' : '📥'}</span>
-      <div style="flex:1;font-size:0.75rem">
-        <span style="color:${isEnv ? '#155724' : '#1a3a6a'};font-weight:600">${isEnv ? 'Tú guardaste' : 'Recibido de ' + (entry.from || 'otro dispositivo')}</span>
-        <span style="color:#aaa"> · ${entry.grupos || 0} grupo(s) · ${entry.n || 0} cal.</span>
-      </div>
-      <span style="font-size:0.7rem;color:#bbb;white-space:nowrap">${entry.ts}</span>
-    </div>`;
-  }).join('') : `<div style="color:#bbb;font-size:0.78rem;text-align:center;padding:10px 0">Sin sincronizaciones recientes</div>`;
-
-  panel.innerHTML = `
-    <!-- ══ ESTADO DE DISPOSITIVOS CONECTADOS ══ -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px">
-        Estado de dispositivos conectados
-      </div>
-
-      <!-- Este dispositivo -->
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f8f8;border:1.5px solid #e0e0e0;border-radius:10px;margin-bottom:6px">
-        <span style="font-size:1.1rem">💻</span>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:0.85rem;color:#1a1a2e">Este dispositivo</div>
-          <code style="font-size:0.72rem;color:#888">${myId}</code>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="width:8px;height:8px;border-radius:50%;background:${P2P.status==='connected'?'#22cc55':P2P.status==='ready'?'#c8c800':P2P.status==='loading'||P2P.status==='connecting'?'#f0a500':'#ee3333'};display:inline-block"></span>
-          <span style="font-size:0.72rem;color:#555;font-weight:600">${{'idle':'Inactivo','loading':'Cargando…','ready':'Listo','connecting':'Conectando…','connected':'Conectado','error':'Error'}[P2P.status]||P2P.status}</span>
-          <button onclick="p2pCopiarMiId()" ${P2P.myId ? '' : 'disabled'}
-            style="padding:4px 10px;background:var(--ink);color:white;border:none;border-radius:5px;
-                   font-family:inherit;font-size:0.72rem;font-weight:700;cursor:pointer;margin-left:4px">
-            📋 Copiar ID
-          </button>
-        </div>
-      </div>
-
-      <!-- Dispositivo remoto -->
-      ${hasRemote || connected ? `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-                  background:${connected ? '#f0fff4' : '#fff8f0'};
-                  border:1.5px solid ${connected ? '#a0ddb0' : '#f0c080'};border-radius:10px">
-        <span style="font-size:1.1rem">📱</span>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:0.85rem;color:#1a1a2e">Otro dispositivo</div>
-          <code style="font-size:0.72rem;color:#888">${P2P.remoteId || '—'}</code>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-          <span style="width:8px;height:8px;border-radius:50%;background:${connected ? '#22cc55' : '#f0a500'};display:inline-block"></span>
-          <span style="font-size:0.72rem;color:${connected ? '#155724' : '#b85c00'};font-weight:600">${connected ? 'Conectado' : 'Sin conexión'}</span>
-          ${!connected ? `<button onclick="p2pConectar(P2P.remoteId)"
-            style="padding:4px 10px;background:#2a4a9a;color:white;border:none;
-                   border-radius:5px;font-family:inherit;font-size:0.72rem;font-weight:700;cursor:pointer">
-            🔄 Reconectar
-          </button>` : ''}
-          <button onclick="p2pOlvidarRemoto()"
-            style="padding:4px 8px;background:#fff0f0;color:#aa3333;border:1px solid #ffcccc;
-                   border-radius:5px;font-family:inherit;font-size:0.7rem;cursor:pointer">
-            ✕
-          </button>
-        </div>
-      </div>
-      ` : `
-      <div style="padding:10px 14px;background:#fafafa;border:1.5px dashed #ddd;border-radius:10px">
-        <div style="font-size:0.78rem;color:#888;margin-bottom:8px">Conectar otro dispositivo — ingresa su ID:</div>
-        <div style="display:flex;gap:8px">
-          <input id="p2pRemoteIdInput" type="text" placeholder="ej: rc-k7m3x"
-            style="flex:1;padding:7px 12px;border:1.5px solid #ccc;border-radius:7px;
-                   font-family:inherit;font-size:0.82rem;outline:none"
-            onfocus="this.style.borderColor='#2a4a9a'"
-            onblur="this.style.borderColor='#ccc'"
-            onkeydown="if(event.key==='Enter') p2pGuardarIdRemoto()">
-          <button onclick="p2pGuardarIdRemoto()"
-            style="padding:7px 16px;background:var(--ink);color:white;border:none;border-radius:7px;
-                   font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap">
-            🔗 Conectar
-          </button>
-        </div>
-        <div style="font-size:0.7rem;color:#aaa;margin-top:5px">Abre la app en el otro dispositivo y copia el ID que aparece arriba.</div>
-      </div>
-      `}
-    </div>
-
-    <!-- ══ OPCIONES DE SINCRONIZACIÓN ══ -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px">
-        Opciones de sincronización
-      </div>
-
-      <!-- Toggle: sincronizar al guardar -->
-      <div style="display:flex;align-items:center;justify-content:space-between;
-                  padding:11px 14px;background:${P2P.autoSync ? '#f0fff4' : '#fafafa'};
-                  border:1.5px solid ${P2P.autoSync ? '#a0ddb0' : '#ddd'};border-radius:10px;margin-bottom:8px">
-        <div>
-          <div style="font-weight:700;font-size:0.85rem;color:${P2P.autoSync ? '#155724' : '#555'}">
-            ✅ Sincronizar automáticamente al guardar
-          </div>
-          <div style="font-size:0.72rem;color:#888;margin-top:2px">
-            Al hacer clic en 💾 Guardar, todos los dispositivos conectados se actualizan
-          </div>
-        </div>
-        <button onclick="p2pToggleAutoSync()"
-          style="padding:7px 18px;background:${P2P.autoSync ? '#155724' : '#aaa'};color:white;
-                 border:none;border-radius:20px;font-family:inherit;font-size:0.82rem;
-                 font-weight:700;cursor:pointer;white-space:nowrap;min-width:56px;
-                 transition:background 0.2s">
-          ${P2P.autoSync ? 'ON' : 'OFF'}
-        </button>
-      </div>
-
-      ${connected ? `
-      <!-- Sincronizar manualmente ahora -->
-      <button onclick="_p2pEnviarAlGuardar()"
-        style="width:100%;padding:11px;background:linear-gradient(135deg,#1a3a6a,#2a5a9a);
-               color:white;border:none;border-radius:10px;font-family:inherit;
-               font-size:0.88rem;font-weight:700;cursor:pointer;
-               display:flex;align-items:center;justify-content:center;gap:8px;
-               box-shadow:0 2px 8px rgba(26,58,106,0.3)">
-        <span>📤</span> Sincronizar ahora (sin esperar al guardar)
-      </button>
-      ` : `
-      <div style="padding:10px 14px;background:#fff8f0;border:1.5px solid #f0c080;border-radius:8px;font-size:0.78rem;color:#7a5a00">
-        ⚠️ Conecta el otro dispositivo para habilitar la sincronización
-      </div>
-      `}
-    </div>
-
-    <!-- ══ HISTORIAL DE SINCRONIZACIONES ══ -->
-    <div>
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-        <span>Últimas sincronizaciones</span>
-        ${P2P.syncLog.length ? `<button onclick="P2P.syncLog=[];p2pSaveState();p2pRefreshUI()" style="background:none;border:none;color:#bbb;font-size:0.7rem;cursor:pointer;padding:0">Limpiar</button>` : ''}
-      </div>
-      <div style="background:#fafafa;border:1.5px solid #eee;border-radius:10px;padding:8px 12px">
-        ${logHTML}
-      </div>
-    </div>
-
-    <!-- ══ INSTRUCCIONES ══ -->
-    <details style="font-size:0.78rem;color:#555;border:1px solid #e0e0e0;border-radius:8px;padding:0;margin-top:12px">
-      <summary style="padding:9px 14px;cursor:pointer;font-weight:700;color:#444;list-style:none;
-                      display:flex;align-items:center;gap:6px">
-        <span>❓</span> ¿Cómo funciona?
-      </summary>
-      <div style="padding:2px 14px 12px;line-height:1.7;border-top:1px solid #e8e8e8;margin-top:2px">
-        <ol style="padding-left:18px;display:flex;flex-direction:column;gap:4px;margin:8px 0 0">
-          <li><strong>Primera vez:</strong> abre esta pantalla en los dos dispositivos.</li>
-          <li>Copia tu <strong>ID</strong> y pégalo en el otro dispositivo (o al revés).</li>
-          <li>Presiona <strong>Conectar</strong>. El estado cambiará a 🟢 Conectado.</li>
-          <li><strong>Siguiente vez:</strong> la conexión se restablece automáticamente.</li>
-          <li>Cada vez que presiones <strong>💾 Guardar</strong>, los cambios se envían a todos los dispositivos conectados al instante.</li>
-        </ol>
-        <div style="margin-top:8px;padding:6px 10px;background:#fff8e8;border-radius:6px;
-                    border-left:3px solid #f0a500;font-size:0.73rem">
-          💡 Ambos dispositivos necesitan internet para la señalización inicial. Los datos viajan directo entre dispositivos.
-        </div>
-      </div>
-    </details>
-
-    <!-- Botón desactivar -->
-    ${P2P.myId ? `
-      <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <button onclick="p2pResetearIds()"
-          style="padding:5px 14px;background:#fff8e8;color:#7a5a00;border:1.5px solid #f0c060;
-                 border-radius:6px;font-family:inherit;font-size:0.75rem;font-weight:700;cursor:pointer"
-          title="Borra los IDs guardados y genera unos nuevos — úsalo si los dispositivos no se reconocen">
-          🔁 Restablecer IDs (si no conecta)
-        </button>
-        <button onclick="p2pDesconectar()"
-          style="padding:5px 12px;background:none;color:#aaa;border:1px solid #ddd;
-                 border-radius:6px;font-family:inherit;font-size:0.72rem;cursor:pointer">
-          ⊘ Desactivar sincronización
-        </button>
-      </div>
-    ` : `
-      <div style="margin-top:12px">
-        <button onclick="p2pInit()"
-          style="padding:8px 18px;background:var(--ink);color:white;border:none;border-radius:7px;
-                 font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer">
-          ▶ Activar sincronización
-        </button>
-      </div>
-    `}
-  `;
-}
-
-// ── Restablecer completamente los IDs P2P ────────────────────────────────
-// Úsalo cuando los IDs guardados son incompatibles (ej: UUIDs de versión anterior).
-function p2pResetearIds() {
-  if (!confirm('¿Restablecer los IDs de sincronización?\n\nSe generarán IDs nuevos en ambos dispositivos. Deberás volver a conectarlos una vez.')) return;
-  if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
-  P2P.conns.forEach(c => { try { c.close(); } catch(e){} });
-  P2P.conns = []; P2P.conn = null;
-  if (P2P.peer) { try { P2P.peer.destroy(); } catch(e){} P2P.peer = null; }
-  P2P.myId = null; P2P.remoteId = null; P2P.status = 'idle';
-  P2P.lastSync = null; P2P.syncLog = [];
-  localStorage.removeItem(P2P_STORAGE_KEY);
-  showToast('🔁 IDs restablecidos — generando nuevos…', 'success');
-  setTimeout(() => p2pInit(), 600);
-}
-
-// ── Olvidar ID remoto (para cambiar de par) ───────────────────────────────
-function p2pOlvidarRemoto() {
-  if (P2P.autoRetry) { clearTimeout(P2P.autoRetry); P2P.autoRetry = null; }
-  P2P.conns.forEach(c => { try { c.close(); } catch(e){} });
-  P2P.conns = [];
-  P2P.conn  = null;
-  P2P.remoteId = null;
-  p2pSaveState();
-  p2pSetStatus('ready', 'Par olvidado · Ingresa el nuevo ID');
-  p2pRefreshUI();
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// RENDER DE LA PESTAÑA DE AJUSTES
-// ════════════════════════════════════════════════════════════════════════════
-
 // ════════════════════════════════════════════════════════════════════════
 // ---- INFORMES FINALES TAB (formato oficial IEEPO — solo para imprimir) ----
 // ════════════════════════════════════════════════════════════════════════
@@ -5610,7 +4677,7 @@ let _concUI = { hojaSel: null };
 function _concBloqueDatos(grado, letra) {
   const alumnos = _concAlumnosDeLetra(grado, letra).map(a => {
     const extra = _concGetExtra(a.name);
-    const periodos = [a.p1, a.p2, a.p3].map(v => (v !== null && v !== undefined) ? Math.round(v) : null);
+    const periodos = [a.p1, a.p2, a.p3].map(v => (v !== null && v !== undefined) ? Math.trunc(v) : null);
     const conVal = periodos.filter(v => v !== null);
     const promFinal = conVal.length ? conVal.reduce((s, v) => s + v, 0) / conVal.length : null;
     return { name: a.name, sexo: a.sexo, periodos, promFinal, extra };
@@ -5896,9 +4963,9 @@ async function _generarConcentradoXLSX() {
         const row = ws.getRow(r);
         row.getCell(1).value = i + 1;
         row.getCell(2).value = al ? al.name : '';
-        row.getCell(3).value = (al && al.p1 !== null && al.p1 !== undefined) ? Math.round(al.p1) : null;
-        row.getCell(5).value = (al && al.p2 !== null && al.p2 !== undefined) ? Math.round(al.p2) : null;
-        row.getCell(7).value = (al && al.p3 !== null && al.p3 !== undefined) ? Math.round(al.p3) : null;
+        row.getCell(3).value = (al && al.p1 !== null && al.p1 !== undefined) ? Math.trunc(al.p1) : null;
+        row.getCell(5).value = (al && al.p2 !== null && al.p2 !== undefined) ? Math.trunc(al.p2) : null;
+        row.getCell(7).value = (al && al.p3 !== null && al.p3 !== undefined) ? Math.trunc(al.p3) : null;
         const hCell = row.getCell(8);
         hCell.value = { formula: `AVERAGE(C${r},E${r},G${r})` };
         hCell.numFmt = '0.0';
@@ -6020,25 +5087,7 @@ function renderSettingsTab(container) {
       </div>
     </div>
 
-    <!-- ══ 2. ASISTENTE DE IA ═══════════════════════════════════════════ -->
-    <div style="background:white;border:2px solid var(--accent);border-radius:12px;overflow:hidden;
-                box-shadow:0 2px 10px rgba(200,66,42,0.12)">
-      <div style="background:linear-gradient(135deg,var(--ink) 0%,var(--accent) 100%);
-                  padding:14px 20px;display:flex;align-items:center;gap:12px">
-        <img src="${IA_AVATAR_DATA_URI}" alt="Asistente IA" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">
-        <div style="flex:1">
-          <div style="font-family:'DM Serif Display',serif;font-size:1.05rem;color:white">
-            Asistente de IA (gratuito)
-          </div>
-          <div style="font-size:0.72rem;color:rgba(255,255,255,0.65);margin-top:2px">
-            Pregúntale por voz o texto sobre tus grupos — GPT-OSS 120B, gratis con Groq
-          </div>
-        </div>
-      </div>
-      <div id="iaSettingsPanel" style="padding:18px 20px"></div>
-    </div>
-
-    <!-- ══ 3. RESPALDO JSON ══════════════════════════════════════════════ -->
+    <!-- ══ 2. RESPALDO JSON ══════════════════════════════════════════════ -->
     <div style="background:white;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;
                 box-shadow:0 2px 6px rgba(0,0,0,0.05)">
       <div style="background:var(--ink);padding:13px 20px;display:flex;align-items:center;gap:10px">
@@ -6097,32 +5146,6 @@ function renderSettingsTab(container) {
     }
   }
 
-  // Asistente de IA: refrescar UI del panel
-  if (typeof iaRenderSettingsUI === 'function') iaRenderSettingsUI();
-
-  // Actualizar dot de estado periódicamente mientras el panel está visible
-  _p2pStartDotPulse();
-}
-
-// ── Pulso visual del indicador de estado ─────────────────────────────────
-let _p2pDotInterval = null;
-function _p2pStartDotPulse() {
-  if (_p2pDotInterval) clearInterval(_p2pDotInterval);
-  _p2pDotInterval = setInterval(() => {
-    const dot = document.getElementById('p2pStatusDot');
-    if (!dot) { clearInterval(_p2pDotInterval); _p2pDotInterval = null; return; }
-    const colors = {
-      idle: '#888', loading: '#f0a500', ready: '#c8c800',
-      connecting: '#4a80ff', connected: '#22cc55', error: '#ee3333',
-    };
-    dot.style.background = colors[P2P.status] || '#888';
-    // Parpadeo durante connecting/loading
-    if (P2P.status === 'connecting' || P2P.status === 'loading') {
-      dot.style.opacity = dot.style.opacity === '0.3' ? '1' : '0.3';
-    } else {
-      dot.style.opacity = '1';
-    }
-  }, 600);
 }
 
 // ── EXPORTAR JSON + GUARDAR LOCAL ─────────────────────────────────────────
@@ -6139,38 +5162,6 @@ function exportarYGuardar() {
   URL.revokeObjectURL(url);
   showToast('💾 Datos guardados y exportados', 'success');
 }
-
-// ── STUBS DE COMPATIBILIDAD ───────────────────────────────────────────────
-// Funciones que otros módulos pueden referenciar (asistencia, QR de asistencia, etc.)
-
-function switchQRTab(tab)       { /* QR de calificaciones reemplazado por P2P */ }
-function renderSyncQRTab()      { /* reemplazado */ }
-function renderSyncImportTab()  { /* reemplazado */ }
-function setSincImportMode()    { /* reemplazado */ }
-function switchSyncTab()        { /* reemplazado */ }
-function qrNext()               { /* reemplazado */ }
-function qrPrev()               { /* reemplazado */ }
-function exportCurrentGroup() {
-  const g = currentGroup();
-  if (!g) { showToast('Selecciona un grupo primero', 'error'); return; }
-  const exportObj = { groups: [g], exportedAt: new Date().toISOString(), exportType: 'single_group' };
-  const json = JSON.stringify(exportObj, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a'); a.href = url;
-  const now  = new Date();
-  a.download = `grupo_${g.name.replace(/[^a-z0-9]/gi,'_')}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.json`;
-  a.click(); URL.revokeObjectURL(url);
-  showToast('📤 Grupo exportado', 'success');
-}
-
-// Variables heredadas (usadas por módulo de asistencia con QR propio)
-let _activeSyncTab = 'qr';
-let _qrChunkIndex  = 0;
-let _qrChunks      = [];
-let _qrInstance    = null;
-const _origRenderSettings = null;
-function _renderSyncInfo() { /* sin uso en nueva UI */ }
 
 function clearGradesConfirm()    { pendingConfirm=()=>{const g=currentGroup();g.grades={};autoSave();renderMain();showToast('Calificaciones eliminadas','success');}; showConfirm('Borrar Calificaciones','¿Eliminar todas las calificaciones?'); }
 function clearConductConfirm()   { pendingConfirm=()=>{const g=currentGroup();g.conduct={};autoSave();renderMain();showToast('Conducta eliminada','success');}; showConfirm('Borrar Conducta','¿Eliminar todos los registros de conducta?'); }
@@ -6392,7 +5383,7 @@ function calcAvg(g,sid){
   if (stu && stu.inactive) return null;
   // Si hay promedio manual, usarlo
   if (!g.manualAvg) g.manualAvg = {};
-  if (g.manualAvg[sid] !== undefined && g.manualAvg[sid] !== '') return parseFloat(g.manualAvg[sid]);
+  if (g.manualAvg[sid] !== undefined && g.manualAvg[sid] !== '') return Math.trunc(parseFloat(g.manualAvg[sid]));
   let s=0,n=0;
   const totalActivities = g.activities.length;
   if(totalActivities===0) return null;
@@ -6408,17 +5399,17 @@ function calcAvg(g,sid){
       const f=parseFloat(v); if(!isNaN(f)){s+=f;n++;}
     }
   });
-  return n>0 ? Math.round(s/totalActivities) : null;
+  return n>0 ? Math.trunc(s/totalActivities) : null;
 }
 // Calificación final como entero
 function truncateAvg(avg){
   if(avg===null) return null;
-  return Math.round(avg);
+  return Math.trunc(avg);
 }
 function roundStudentAvg(avg){ return truncateAvg(avg); }
 function formatStudentAvg(avg){
   if(avg===null) return '-';
-  return String(Math.round(avg));
+  return String(Math.trunc(avg));
 }
 function gradeClass(avg){if(avg>=9)return'grade-A';if(avg>=7)return'grade-B';if(avg>=6)return'grade-C';return'grade-D';}
 
@@ -6594,7 +5585,7 @@ function refreshGradeCell(sid, aid) {
     g.students.forEach((s, sIdx) => {
       if (!s.inactive) { const a = calcAvg(g, s.id); if (a !== null) { genSum += a; genCnt++; } }
     });
-    const genAvgVal = genCnt > 0 ? (genSum / genCnt).toFixed(1) : '-';
+    const genAvgVal = genCnt > 0 ? (Math.trunc((genSum / genCnt)*10)/10).toFixed(1) : '-';
     const genAvgCls = genCnt > 0 ? gradeClass(parseFloat(genAvgVal)) : '';
     genEl.innerHTML = `<span class="grade-badge ${genAvgCls}" style="font-size:0.95rem;padding:5px 14px">${genAvgVal}</span>`;
   }
@@ -7208,7 +6199,7 @@ function shareWhatsApp(sid) {
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ════════════════════════════════════════════════════════════════════
-// AUTO-SANACIÓN AL ARRANCAR: limpia estado P2P viejo + caché del navegador
+// AUTO-SANACIÓN AL ARRANCAR: limpia restos del módulo P2P + caché del navegador
 // ════════════════════════════════════════════════════════════════════
 (function _autoSanar() {
   // 1. Desregistrar service workers que puedan servir versiones cacheadas
@@ -7223,17 +6214,8 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
     caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
   }
 
-  // 3. Detectar y borrar IDs P2P viejos (UUIDs largos de versiones anteriores)
-  //    Un ID válido nuevo tiene formato: rc-xxxxx (8 chars total)
-  const P2P_KEY = 'regCalif_p2p_v1';
-  try {
-    const saved = JSON.parse(localStorage.getItem(P2P_KEY) || '{}');
-    const esIdViejo = id => typeof id === 'string' && !/^rc-[a-z0-9]{5}$/.test(id);
-    if (esIdViejo(saved.myId) || esIdViejo(saved.remoteId)) {
-      console.info('[AutoSanación] IDs P2P antiguos detectados — limpiando:', saved.myId, saved.remoteId);
-      localStorage.removeItem(P2P_KEY);
-    }
-  } catch(e) {}
+  // 3. Borrar datos del antiguo módulo de sincronización P2P (ya no existe)
+  try { localStorage.removeItem('regCalif_p2p_v1'); } catch(e) {}
 })();
 
 // Aplicar el ícono personalizado del logo (login y encabezado)
@@ -7242,8 +6224,8 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
   const l2 = document.getElementById('headerLogoImg'); if (l2) l2.src = APP_LOGO_DATA_URI;
 })();
 
+try{ localStorage.removeItem('regCalif_ia_config_v1'); localStorage.removeItem('regCalif_ia_pos_v1'); }catch(e){}
 init();
-iaInit();
 buscInit();
 
 // ── GUARDADO DE EMERGENCIA ────────────────────────────────────────────────
@@ -7272,7 +6254,7 @@ setInterval(() => {
       localStorage.setItem('regCalif_v3', JSON.stringify(data));
       // Solo subir si de verdad hay cambios locales sin sincronizar
       if (_hasUnsyncedChanges && FB.status === 'connected' && FB.ref) {
-        FB.ref.set({ ...data, _savedBy: FB.deviceId, _savedAt: data._savedAt, _version: '10.15' })
+        FB.ref.update({ ..._fbSinAsistencia(data), _savedBy: FB.deviceId, _savedAt: data._savedAt, _version: '10.15' })
           .then(() => { _markClean(); })
           .catch(() => {}); // silencioso, no molestar al usuario
       }
@@ -7299,10 +6281,73 @@ function _asistKey(gid,f){return gid+'_'+f;}
 function _saveAsist(){data.asistencia=_asist.records;localStorage.setItem('regCalif_v3',JSON.stringify(data));}
 function _loadAsist(){if(!data.asistencia)data.asistencia={};_asist.records=data.asistencia;}
 
+// ── Asistencia: cada marca se sube DIRECTO a Firebase en su propia ruta ──
+// asistencia/{grupo_fecha}/{alumno} — así dos dispositivos pueden marcar al
+// mismo tiempo sin borrarse entre sí. Las marcas que no se pudieron subir
+// (sin internet) quedan en una cola local y se suben solas al reconectar.
+const ASIST_PEND_KEY = 'regCalif_asistPend_v1';
+function _asistPendLoad(){ try{ return JSON.parse(localStorage.getItem(ASIST_PEND_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function _asistPendSave(p){ try{ localStorage.setItem(ASIST_PEND_KEY, JSON.stringify(p)); }catch(e){} }
+// cambios: { 'grupo_fecha/sid': 'presente'|'ausente'|'tarde'|texto|null }  (null = borrar)
+function _asistPush(cambios){
+  const pend = _asistPendLoad();
+  Object.assign(pend, cambios);
+  _asistPendSave(pend);
+  _asistActualizarIndicador();
+  _asistFlush();
+}
+let _asistFlushing = false;
+function _asistFlush(){
+  if (_asistFlushing || typeof FB === 'undefined' || !FB.db || !FB.authUid) return;
+  const pend = _asistPendLoad();
+  const keys = Object.keys(pend);
+  if (!keys.length) return;
+  const upd = {};
+  keys.forEach(k => { upd[k] = pend[k]; });
+  _asistFlushing = true;
+  FB.db.ref(FB_DATA_PATH + '/asistencia').update(upd).then(() => {
+    // Quitar de la cola solo lo que no cambió mientras se subía
+    const ahora = _asistPendLoad();
+    keys.forEach(k => { if (JSON.stringify(ahora[k]) === JSON.stringify(upd[k])) delete ahora[k]; });
+    _asistPendSave(ahora);
+    _asistFlushing = false;
+    _asist.ultimaSync = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    _asistActualizarIndicador();
+    if (Object.keys(ahora).length) _asistFlush();
+  }).catch(e => {
+    _asistFlushing = false;
+    console.warn('[Asistencia] quedó pendiente de subir:', e.message);
+    _asistActualizarIndicador();
+  });
+}
+// Encima de lo que viene de la nube, aplica las marcas locales que aún no suben
+function _asistAplicarPendientes(remoto){
+  const res = remoto || {};
+  const pend = _asistPendLoad();
+  Object.keys(pend).forEach(path => {
+    const i = path.indexOf('/'); if (i < 0) return;
+    const k = path.slice(0, i), sid = path.slice(i + 1);
+    if (pend[path] === null) { if (res[k]) delete res[k][sid]; }
+    else { if (!res[k]) res[k] = {}; res[k][sid] = pend[path]; }
+  });
+  return res;
+}
+function _asistIndicadorHTML(){
+  const n = Object.keys(_asistPendLoad()).length;
+  if (n > 0) return `<span style="width:7px;height:7px;border-radius:50%;background:#e0a000;flex-shrink:0"></span><span style="color:#b07a00">⏳ ${n} marca${n!==1?'s':''} por subir (se envían al haber internet)</span>`;
+  return `<span style="width:7px;height:7px;border-radius:50%;background:${_asist.ultimaSync?'#2a7a4b':'#ccc'};flex-shrink:0"></span><span style="color:${_asist.ultimaSync?'#2a7a4b':'#bbb'}">${_asist.ultimaSync ? '☁️ Todo subido · ' + _asist.ultimaSync : 'Esperando conexión…'}</span>`;
+}
+function _asistActualizarIndicador(){
+  const el = document.getElementById('asistSyncInd');
+  if (el) el.innerHTML = _asistIndicadorHTML();
+}
+
 function renderAsistenciaTab(container){
   // Si la cámara estaba activa, detenerla limpiamente antes de re-renderizar
   // para que el auto-inicio al final funcione correctamente
-  if(_asist.scanActive){
+  // Si el redibujado lo provocó un dato que llegó de otro dispositivo,
+  // la cámara se deja encendida (más abajo se reconecta al nuevo <video>).
+  if(_asist.scanActive && !_asistAutoCamSkip){
     if(_asist.scanAnim){cancelAnimationFrame(_asist.scanAnim);_asist.scanAnim=null;}
     if(_asist.scanStream){_asist.scanStream.getTracks().forEach(t=>t.stop());_asist.scanStream=null;}
     _asist.scanActive=false;
@@ -7326,10 +6371,7 @@ function renderAsistenciaTab(container){
         <label style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;white-space:nowrap">📅 Fecha</label>
         <input type="date" id="asistFecha" value="${fecha}" style="border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;cursor:pointer" onchange="_asist.fecha=this.value;renderTab()">
       </div>
-      <div title="Se actualiza sola cuando llega una marca de asistencia desde otro dispositivo (ej. la tablet)" style="font-size:0.72rem;color:${_asist.ultimaSync?'#2a7a4b':'#bbb'};font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:5px">
-        <span style="width:7px;height:7px;border-radius:50%;background:${_asist.ultimaSync?'#2a7a4b':'#ccc'};flex-shrink:0"></span>
-        ${_asist.ultimaSync ? 'En vivo · ' + _asist.ultimaSync : 'Esperando datos en vivo…'}
-      </div>
+      <div id="asistSyncInd" title="Cada marca se sube a la nube al instante; si no hay internet se guarda y se sube sola después" style="font-size:0.72rem;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:5px">${_asistIndicadorHTML()}</div>
       <button onclick="marcarTodos('presente')" style="padding:6px 14px;background:#2a7a4b;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">✅ Todos presente</button>
       <button onclick="marcarTodos('ausente')"  style="padding:6px 14px;background:#c8422a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">❌ Todos ausente</button>
       <button onclick="exportarAsistencia()" style="padding:6px 14px;background:var(--blue);color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">📥 Exportar CSV</button>
@@ -7466,6 +6508,8 @@ function setAsist(sid,estado){
   // Si cambia de tarde a otro estado, limpiar el motivo
   if(estado!=='tarde') delete _asist.records[key][sid+'_motivo'];
   _saveAsist();
+  const _c={}; _c[key+'/'+sid]=estado; if(estado!=='tarde') _c[key+'/'+sid+'_motivo']=null;
+  _asistPush(_c);
   const s=g.students.find(x=>x.id===sid);
   const badges={presente:'<span style="background:#d4edda;color:#155724;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">✅ Presente</span>',ausente:'<span style="background:#f8d7da;color:#721c24;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">❌ Ausente</span>',tarde:(()=>{const mot=(_asist.records[key]||{})[sid+'_motivo'];return '<span style="background:#ffe5cc;color:#7a3a00;padding:3px 12px;border-radius:20px;font-weight:700;font-size:0.78rem">⏰ Tarde'+(mot?' — '+escHtml(mot):'')+'</span>';})()};
   const badgeEl=document.getElementById('asistBadge_'+sid);
@@ -7489,8 +6533,12 @@ function marcarTodos(estado){
   _loadAsist();
   const key=_asistKey(g.id,_asist.fecha);
   if(!_asist.records[key])_asist.records[key]={};
-  g.students.filter(s=>!s.inactive).forEach(s=>{_asist.records[key][s.id]=estado;});
-  _saveAsist();renderTab();
+  const _c={};
+  g.students.filter(s=>!s.inactive).forEach(s=>{
+    _asist.records[key][s.id]=estado; _c[key+'/'+s.id]=estado;
+    if(estado!=='tarde'){ delete _asist.records[key][s.id+'_motivo']; _c[key+'/'+s.id+'_motivo']=null; }
+  });
+  _saveAsist(); _asistPush(_c); renderTab();
   showToast(estado==='presente'?'✅ Todos presentes':'❌ Todos ausentes','success');
 }
 
@@ -8974,6 +8022,8 @@ function _guardarTarde(sid) {
   if(motivo) _asist.records[key][sid+'_motivo'] = motivo;
   else delete _asist.records[key][sid+'_motivo'];
   _saveAsist();
+  const _c={}; _c[key+'/'+sid]='tarde'; _c[key+'/'+sid+'_motivo']=motivo||null;
+  _asistPush(_c);
   document.getElementById('tardeModal').remove();
 
   // Actualizar badge en tabla
@@ -9006,311 +8056,6 @@ function _guardarTarde(sid) {
   showToast(`⏰ ${s?s.name:sid} — Tardanza registrada`+(motivo?` (${motivo})`:''),'');
 }
 
-
-// ════════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════════
-// LÓGICA DE FUSIÓN DE DATOS (usada por P2P y por importación manual)
-// ════════════════════════════════════════════════════════════════════
-
-/**
- * Aplica un payload sync_v1 recibido (por P2P o archivo) al estado local.
- * Fusiona calificaciones, tareas, conducta y asistencia sin borrar datos existentes.
- */
-function _aplicarSincDia(sync, fbEl) {
-  let calMerged = 0, asistMerged = 0, gruposMerged = 0;
-
-  Object.values(sync.grupos).forEach(sg => {
-    let localG = data.groups.find(g => g.id === sg.id);
-
-    if (!localG) {
-      data.groups.push({ ...sg });
-      gruposMerged++;
-      return;
-    }
-
-    // Calificaciones: solo sobreescribe si tiene valor
-    Object.keys(sg.grades || {}).forEach(k => {
-      if (sg.grades[k] !== undefined && sg.grades[k] !== '') {
-        localG.grades[k] = sg.grades[k];
-        calMerged++;
-      }
-    });
-
-    // Tareas
-    Object.keys(sg.hwStatus || {}).forEach(k => {
-      localG.hwStatus[k] = sg.hwStatus[k];
-    });
-
-    // Conducta: conserva el nivel más alto
-    Object.keys(sg.conduct || {}).forEach(k => {
-      if (!localG.conduct[k] || (sg.conduct[k]?.level || 0) > (localG.conduct[k]?.level || 0)) {
-        localG.conduct[k] = sg.conduct[k];
-      }
-    });
-
-    // Asistencia (en localStorage)
-    const stored = JSON.parse(localStorage.getItem('regCalif_v3') || '{}');
-    if (!stored.asistencia) stored.asistencia = {};
-    Object.keys(sg.asistencia || {}).forEach(k => {
-      stored.asistencia[k] = { ...(stored.asistencia[k] || {}), ...sg.asistencia[k] };
-      asistMerged++;
-    });
-    localStorage.setItem('regCalif_v3', JSON.stringify(stored));
-    gruposMerged++;
-  });
-
-  autoSave();
-  renderMain();
-
-  const msg = `✅ Sincronización completa — ${calMerged} calificaciones · ${asistMerged} asistencias · ${gruposMerged} grupo${gruposMerged !== 1 ? 's' : ''}`;
-  const fb = fbEl || document.getElementById('sincScanFeedback');
-  if (fb) {
-    fb.innerHTML = `<div style="background:#f0fff4;border:1.5px solid #a0ddb0;border-radius:8px;
-      padding:10px 14px;font-weight:700;color:#155724">${msg}</div>`;
-  }
-  showToast(msg, 'success');
-
-  // Tonos de éxito
-  try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    [880, 1100, 1320].forEach((freq, i) => {
-      const osc = ac.createOscillator(), gain = ac.createGain();
-      osc.connect(gain); gain.connect(ac.destination);
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.12, ac.currentTime + i * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.12 + 0.2);
-      osc.start(ac.currentTime + i * 0.12);
-      osc.stop(ac.currentTime + i * 0.12 + 0.2);
-    });
-  } catch(e) {}
-}
-
-/**
- * Importa un archivo sync_v1.json desde un input[type=file].
- * Complemento manual al P2P para cuando no hay internet.
- */
-function importarSincDia(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const label = document.getElementById('sincImportLabel');
-  if (label) label.textContent = file.name;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const sync = JSON.parse(e.target.result);
-      if (sync.version !== 'sync_v1') { showToast('Archivo no es un sync válido', 'error'); return; }
-      _aplicarSincDia(sync);
-    } catch(err) { showToast('Error al leer archivo: ' + err.message, 'error'); }
-    input.value = '';
-  };
-  reader.readAsText(file);
-}
-
-// ════════════════════════════════════════════════════════════════════
-// SINCRONIZACIÓN DIARIA
-// ════════════════════════════════════════════════════════════════════
-
-function _getSyncHoy() {
-  const hoy = new Date().toISOString().slice(0,10);
-  const cambios = { fecha: hoy, version: 'sync_v1', grupos: {} };
-  let totalCambios = 0;
-
-  data.groups.forEach(g => {
-    const grpCambios = { grades: {}, hwStatus: {}, conduct: {}, asistencia: {} };
-    let hayCambios = false;
-
-    // Calificaciones modificadas hoy
-    // Usamos el campo _lastEdit si existe, o incluimos todas (fallback seguro)
-    Object.keys(g.grades||{}).forEach(k => {
-      if (g.grades[k] !== undefined && g.grades[k] !== '') {
-        grpCambios.grades[k] = g.grades[k];
-        hayCambios = true; totalCambios++;
-      }
-    });
-
-    // Tareas de hoy
-    Object.keys(g.hwStatus||{}).forEach(k => {
-      grpCambios.hwStatus[k] = g.hwStatus[k];
-      hayCambios = true;
-    });
-
-    // Conducta
-    Object.keys(g.conduct||{}).forEach(k => {
-      grpCambios.conduct[k] = g.conduct[k];
-      hayCambios = true;
-    });
-
-    // Asistencia de hoy
-    const asistData = JSON.parse(localStorage.getItem('regCalif_v3')||'{}').asistencia || {};
-    const keyHoy = g.id + '_' + hoy;
-    if (asistData[keyHoy]) {
-      grpCambios.asistencia[keyHoy] = asistData[keyHoy];
-      hayCambios = true;
-    }
-
-    if (hayCambios) {
-      cambios.grupos[g.id] = {
-        id: g.id, name: g.name, subject: g.subject || '',
-        students: g.students, // incluir alumnos para que laptop reconozca IDs
-        ...grpCambios
-      };
-    }
-  });
-
-  cambios.totalCambios = totalCambios;
-  return cambios;
-}
-
-function _renderSyncInfo() {
-  const el = document.getElementById('syncDayInfo');
-  if (!el) return;
-  const hoy = new Date().toISOString().slice(0,10);
-  const sync = _getSyncHoy();
-  const nGrupos = Object.keys(sync.grupos).length;
-  const nCal = sync.totalCambios;
-  const asistData = JSON.parse(localStorage.getItem('regCalif_v3')||'{}').asistencia || {};
-  const nAsist = Object.keys(asistData).filter(k=>k.endsWith('_'+hoy)).length;
-
-  el.innerHTML = `
-    <div style="font-weight:700;margin-bottom:6px;color:#1a2a5a">📊 Datos disponibles para sincronizar</div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap">
-      <div><span style="font-size:1.2rem;font-weight:700;color:#2a5a8a">${nGrupos}</span> <span style="font-size:0.78rem;color:#555">grupo${nGrupos!==1?'s':''}</span></div>
-      <div><span style="font-size:1.2rem;font-weight:700;color:#2a7a4b">${nCal}</span> <span style="font-size:0.78rem;color:#555">calificaciones</span></div>
-      <div><span style="font-size:1.2rem;font-weight:700;color:#b85c00">${nAsist}</span> <span style="font-size:0.78rem;color:#555">registros asistencia</span></div>
-    </div>
-    ${nGrupos===0?'<div style="margin-top:6px;font-size:0.78rem;color:#888">Registra calificaciones o asistencia primero.</div>':''}
-  `;
-}
-
-function exportarSincDia() {
-  const sync = _getSyncHoy();
-  if (Object.keys(sync.grupos).length === 0) {
-    showToast('No hay datos para sincronizar hoy', 'error'); return;
-  }
-  const json = JSON.stringify(sync, null, 2);
-  const blob = new Blob([json], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `sync_${sync.fecha}_${new Date().getHours()}h${String(new Date().getMinutes()).padStart(2,'0')}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('📄 Archivo de sincronización listo — mándalo por WhatsApp o USB', 'success');
-}
-
-function mostrarQRSincDia() {
-  const sync = _getSyncHoy();
-  if (Object.keys(sync.grupos).length === 0) {
-    showToast('No hay datos para mostrar', 'error'); return;
-  }
-
-  // Quitar 'students' del payload para reducir tamaño (la laptop ya los tiene)
-  const syncSlim = { fecha: sync.fecha, version: sync.version, grupos: {} };
-  Object.keys(sync.grupos).forEach(gid => {
-    const g = sync.grupos[gid];
-    syncSlim.grupos[gid] = {
-      id: g.id, name: g.name, subject: g.subject || '',
-      grades: g.grades || {},
-      hwStatus: g.hwStatus || {},
-      conduct: g.conduct || {},
-      asistencia: g.asistencia || {}
-    };
-    // omitir g.students — ahorra ~70% del payload
-  });
-
-  // Comprimir con LZ y codificar en base64
-  const json = JSON.stringify(syncSlim);
-  const compressed = LZString.compressToBase64(json);
-  const payload = 'LZ:' + compressed; // prefijo para que el lector sepa descomprimir
-
-  const charCount = payload.length;
-  const qrSize = charCount <= 800 ? 1 : charCount <= 1600 ? 2 : charCount <= 2400 ? 3 : Math.ceil(charCount/800);
-
-  const ex = document.getElementById('sincQRModal'); if(ex) ex.remove();
-  const modal = document.createElement('div');
-  modal.id = 'sincQRModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px';
-
-  // Si cabe en 1 QR (≤2953 chars con nivel L)
-  if (payload.length <= 2800) {
-    modal.innerHTML = `
-      <div style="color:white;text-align:center">
-        <div style="font-size:1.2rem;font-weight:700;margin-bottom:4px">📷 Código QR de Sincronización</div>
-        <div style="font-size:0.78rem;opacity:0.75">Escanea desde la laptop con la cámara</div>
-      </div>
-      <div style="background:white;border-radius:16px;padding:20px;text-align:center">
-        <div id="sincQRCode" style="display:flex;justify-content:center;margin-bottom:10px"></div>
-        <div style="font-size:0.72rem;color:#888">${Object.keys(syncSlim.grupos).length} grupo(s) · ${json.length} → ${compressed.length} chars comprimido</div>
-      </div>
-      <button onclick="document.getElementById('sincQRModal').remove()" style="color:white;background:none;border:1.5px solid rgba(255,255,255,0.5);border-radius:8px;padding:10px 28px;font-family:inherit;font-size:0.9rem;cursor:pointer">✕ Cerrar</button>
-    `;
-    document.body.appendChild(modal);
-
-    const container = document.getElementById('sincQRCode');
-    const div = document.createElement('div');
-    container.appendChild(div);
-    // Nivel L = máxima capacidad (~2953 chars), QR grande para mejor lectura
-    new QRCode(div, { text: payload, width: 300, height: 300, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
-
-  } else {
-    // Fallback: dividir en chunks si los datos son muy grandes
-    const CHUNK = 900;
-    const chunks = [];
-    for (let i = 0; i < payload.length; i += CHUNK) chunks.push(payload.slice(i, i + CHUNK));
-
-    modal.innerHTML = `
-      <div style="color:white;text-align:center">
-        <div style="font-size:1.2rem;font-weight:700;margin-bottom:4px">📷 QRs de Sincronización</div>
-        <div style="font-size:0.78rem;opacity:0.75">Escanea cada QR en orden desde la laptop</div>
-      </div>
-      <div style="background:white;border-radius:16px;padding:20px;text-align:center;min-width:280px">
-        <div id="sincQRCode" style="display:flex;justify-content:center;margin-bottom:10px"></div>
-        <div id="sincQRLabel" style="font-size:0.88rem;font-weight:700;color:#1a1a2e;margin-bottom:4px"></div>
-        <div id="sincQRSub" style="font-size:0.72rem;color:#888;margin-bottom:14px"></div>
-        <div style="display:flex;gap:8px;justify-content:center">
-          <button id="sincQRPrev" onclick="_sincQRNav(-1)" style="padding:8px 20px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">← Anterior</button>
-          <button id="sincQRNext" onclick="_sincQRNav(1)" style="padding:8px 20px;background:#2a4a8a;color:white;border:none;border-radius:6px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">Siguiente →</button>
-        </div>
-      </div>
-      <button onclick="document.getElementById('sincQRModal').remove()" style="color:white;background:none;border:1.5px solid rgba(255,255,255,0.5);border-radius:8px;padding:10px 28px;font-family:inherit;font-size:0.9rem;cursor:pointer">✕ Cerrar</button>
-    `;
-    document.body.appendChild(modal);
-    window._sincChunks = chunks;
-    window._sincQRIdx = 0;
-    _renderSincQR();
-  }
-}
-
-function _renderSincQR() {
-  const chunks = window._sincChunks;
-  const idx = window._sincQRIdx;
-  const total = chunks.length;
-  const payload = JSON.stringify({i:idx, t:total, d:chunks[idx]});
-
-  const container = document.getElementById('sincQRCode');
-  container.innerHTML = '';
-  const div = document.createElement('div');
-  container.appendChild(div);
-
-  new QRCode(div, { text: payload, width: 280, height: 280, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
-
-  document.getElementById('sincQRLabel').textContent = `QR ${idx+1} de ${total}`;
-  document.getElementById('sincQRSub').textContent = idx===total-1 ? '✅ Último QR' : `Escanea este, luego toca Siguiente →`;
-  document.getElementById('sincQRPrev').style.opacity = idx===0?'0.3':'1';
-  const btn = document.getElementById('sincQRNext');
-  btn.textContent = idx===total-1 ? '✅ Listo' : 'Siguiente →';
-  btn.onclick = idx===total-1 ? ()=>document.getElementById('sincQRModal').remove() : ()=>_sincQRNav(1);
-}
-
-function _sincQRNav(dir) {
-  window._sincQRIdx = Math.max(0, Math.min(window._sincChunks.length-1, window._sincQRIdx+dir));
-  _renderSincQR();
-}
-
-function _cargarQRCode(cb) {
-  // QRCode library is now embedded inline - always available
-  cb();
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
@@ -9399,7 +8144,12 @@ function fbInit() {
 
   // Generar deviceId si no existe
   if (!FB.deviceId) {
-    FB.deviceId = P2P.myId || ('dev-' + Math.random().toString(36).slice(2,7));
+    // ID fijo por dispositivo (se guarda), así la app reconoce sus propios guardados
+    try { FB.deviceId = localStorage.getItem('regCalif_deviceId'); } catch(e) {}
+    if (!FB.deviceId) {
+      FB.deviceId = 'dev-' + Math.random().toString(36).slice(2,7);
+      try { localStorage.setItem('regCalif_deviceId', FB.deviceId); } catch(e) {}
+    }
   }
 
   _fbCargarSDK(() => {
@@ -9460,6 +8210,7 @@ function _fbConectarBaseDatos() {
     // Detectar conectividad
     FB.db.ref('.info/connected').on('value', snap => {
       const online = snap.val() === true;
+      if (online) _asistFlush();
       if (online && FB.status !== 'connected') {
         fbSetStatus('connected', 'Conectado a Firebase');
         fbRefreshUI();
@@ -9504,11 +8255,26 @@ function _fbConectarBaseDatos() {
     FB.asistRef = FB.db.ref(FB_DATA_PATH + '/asistencia');
     FB.asistListener = FB.asistRef.on('value', snap => {
       const remoto = snap.val() || {};
-      data.asistencia = remoto;
+      // Primera lectura de la sesión: lo que existe aquí y no en la nube
+      // (marcas viejas que nunca se subieron) se manda a la cola para subirse.
+      if (!FB._asistMergeHecho) {
+        FB._asistMergeHecho = true;
+        const local = data.asistencia || {}, extra = {};
+        Object.keys(local).forEach(k => {
+          const rec = local[k] || {};
+          Object.keys(rec).forEach(sid => {
+            if (!remoto[k] || remoto[k][sid] === undefined) extra[k + '/' + sid] = rec[sid];
+          });
+        });
+        if (Object.keys(extra).length) { const p = _asistPendLoad(); Object.keys(extra).forEach(x => { if (!(x in p)) p[x] = extra[x]; }); _asistPendSave(p); }
+      }
+      data.asistencia = _asistAplicarPendientes(remoto);
+      _asistFlush();
       _asist.records = data.asistencia;
       _asist.ultimaSync = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       try { localStorage.setItem('regCalif_v3', JSON.stringify(data)); } catch(e){}
       if (currentTab === 'asistencia') { _asistAutoCamSkip = true; renderTab(); }
+      _asistActualizarIndicador();
     });
 
     fbSetStatus('connected', 'Conectado');
@@ -9613,15 +8379,19 @@ function fbGuardar() {
     return true;
   } catch(e) { return false; }
 }
+// La asistencia NO viaja en el guardado general: tiene su propia ruta y se
+// escribe marca por marca (ver _asistPush). Así un guardado de otro
+// dispositivo con asistencia vieja no puede borrar la de hoy.
+function _fbSinAsistencia(obj){ const { asistencia, ...resto } = obj || {}; return resto; }
 function _fbGuardarReal() {
   const payload = {
-    ...data,
+    ..._fbSinAsistencia(data),
     _savedBy:  FB.deviceId,
     _savedAt:  Date.now(),
     _version:  '10.15',
     alumnosUnicos: (function(){ try { return _construirIndiceAlumnos(); } catch(e) { return []; } })(),
   };
-  FB.ref.set(payload).then(() => {
+  FB.ref.update(payload).then(() => {
     const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
     FB.lastSync = hora;
     FB.syncLog.unshift({ ts: hora, dir: 'enviado', device: FB.deviceId });
@@ -9690,6 +8460,7 @@ function _fbAplicarRemoto(remote) {
 
     // Guardar localmente
     data = { ...remoteData };
+    data.asistencia = _asistAplicarPendientes(data.asistencia || {});
     data._savedAt = _savedAt || Date.now();
     data._lastKnownRemoteAt = data._savedAt; // ya sabemos qué hay en la nube ahora
     _migrateGroups();
@@ -9727,6 +8498,7 @@ function fbSincronizacionForzada() {
     localStorage.removeItem('regCalif_v3');
     const { _savedBy, _savedAt, _version, alumnosUnicos: _indiceIgnorado, ...remoteData } = remote;
     data = { ...remoteData };
+    data.asistencia = _asistAplicarPendientes(data.asistencia || {});
     data._savedAt = _savedAt || Date.now();
     _migrateGroups();
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
@@ -9929,431 +8701,297 @@ function fbRefreshUI() {
   `;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// 🧑‍🏫 ASISTENTE DE IA FLOTANTE (Groq — GPT-OSS 120B, gratis)
-// ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+// 📋 REPORTE PARA ASESOR DE GRUPO
+// Desde una clase combinada (ej. "PRIMERO ABC") se elige el grupo real
+// (A, B o C) y se genera un reporte con: tareas faltantes, no entregadas,
+// calificaciones registradas, promedio actual y reportes de conducta.
+// Se puede imprimir o enviar por WhatsApp al número del asesor.
+// ════════════════════════════════════════════════════════════════════════
+let _asesorUI = { key: null, solo: false };
 
-function iaLoadConfig(){
-  try{
-    const saved = JSON.parse(localStorage.getItem(IA_CONFIG_KEY) || 'null');
-    if(saved) IA = Object.assign(IA, saved);
-  }catch(e){}
-  // Se cambió de proveedor (Google Gemini → GitHub Models → OpenRouter → Groq).
-  // Las claves y modelos antiguos no sirven aquí, se limpian para evitar
-  // errores confusos de autenticación/CORS con el proveedor equivocado.
-  const esModeloViejo = IA_RETIRED_MODELS.includes(IA.model) || (IA.model||'').indexOf('gemini') === 0;
-  const esClaveVieja = (IA.apiKey||'').indexOf('AIza') === 0
-    || (IA.apiKey||'').indexOf('github_pat_') === 0
-    || (IA.apiKey||'').indexOf('ghp_') === 0
-    || (IA.apiKey||'').indexOf('sk-or-') === 0;
-  if(esModeloViejo || esClaveVieja){
-    IA.model = 'openai/gpt-oss-120b';
-    IA.apiKey = '';
-    IA.enabled = false;
-    iaSaveConfig();
+function _asesorGrupos(g) {
+  const map = {};
+  (g.students || []).filter(s => !s.inactive).forEach(s => {
+    const gr = _alumnoGrado(s, g);
+    const grado = (gr && gr !== '?') ? gr : '';
+    const letra = _alumnoGrupo(s, g) || '';
+    const key = grado + letra;
+    if (!map[key]) map[key] = { key, grado, letra, alumnos: [] };
+    map[key].alumnos.push(s);
+  });
+  return Object.values(map).sort((a, b) => (a.letra ? a.key : 'ZZ').localeCompare(b.letra ? b.key : 'ZZ'));
+}
+
+function _asesorEtiqueta(c) {
+  return c.letra ? `${c.grado ? c.grado + '° ' : ''}"${c.letra}"` : 'Sin grupo asignado';
+}
+
+function _asesorGetInfo(key) {
+  if (!data.asesores) data.asesores = {};
+  return data.asesores[key] || { nombre: '', tel: '' };
+}
+function _asesorSetInfo(key, campo, valor) {
+  if (!data.asesores) data.asesores = {};
+  if (!data.asesores[key]) data.asesores[key] = { nombre: '', tel: '' };
+  data.asesores[key][campo] = valor;
+  data._savedAt = Date.now();
+  try { localStorage.setItem('regCalif_v3', JSON.stringify(data)); } catch (e) {}
+  _markDirty();
+}
+
+// Clasifica el valor de una actividad
+function _asesorValorAct(v) {
+  if (v === undefined || v === null || v === '') return { tipo: 'faltante' };
+  if (v === 'NE') return { tipo: 'ne' };
+  if (typeof v === 'string' && v.startsWith('T:')) {
+    const n = v.slice(2);
+    return n !== '' ? { tipo: 'calificada', txt: n + ' (tarde)' } : { tipo: 'calificada', txt: 'entregada tarde, sin calificar' };
   }
-}
-function iaSaveConfig(){
-  try{ localStorage.setItem(IA_CONFIG_KEY, JSON.stringify(IA)); }catch(e){}
-}
-
-// ── Encendido / apagado del asistente ──
-function iaApplyEnabled(){
-  const w = document.getElementById('iaWidget');
-  if(!w) return;
-  if(IA.enabled) w.classList.add('ia-show'); else w.classList.remove('ia-show');
-}
-function iaSetEnabled(v){
-  IA.enabled = !!v;
-  iaSaveConfig();
-  iaApplyEnabled();
-  iaRenderSettingsUI();
-}
-function iaSetVoice(v){
-  IA.voice = !!v;
-  iaSaveConfig();
-  const btn = document.getElementById('iaVoiceBtn');
-  if(btn) btn.textContent = IA.voice ? '🔊' : '🔇';
-  if(!IA.voice && 'speechSynthesis' in window) window.speechSynthesis.cancel();
-}
-function iaToggleVoice(){ iaSetVoice(!IA.voice); }
-function iaSaveKey(){
-  const keyInput = document.getElementById('iaApiKeyInput');
-  const modelSel = document.getElementById('iaModelSelect');
-  IA.apiKey = keyInput ? keyInput.value.trim() : IA.apiKey;
-  IA.model  = modelSel ? modelSel.value : IA.model;
-  // Si ya hay una clave, activar el asistente flotante automáticamente
-  if(IA.apiKey) IA.enabled = true;
-  iaSaveConfig();
-  iaApplyEnabled();
-  iaRenderSettingsUI();
-  const label = document.getElementById('iaModelLabel');
-  if(label) label.textContent = IA.model;
-  showToast(IA.apiKey ? '✓ Asistente activado — busca el ícono 🤖 flotando' : '✓ Configuración guardada', 'success');
+  if (typeof v === 'string' && v.startsWith('IN:')) {
+    const n = v.slice(3);
+    return n !== '' ? { tipo: 'calificada', txt: n + ' (inasistencia)' } : { tipo: 'faltante', nota: 'faltó a clase' };
+  }
+  return { tipo: 'calificada', txt: String(v) };
 }
 
-// ── Panel de Ajustes ──
-function iaSettingsHTML(){
-  const hasKey = !!IA.apiKey;
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--cream);border-radius:8px;margin-bottom:14px">
-      <div>
-        <strong style="font-size:.88rem">Asistente flotante</strong>
-        <div style="font-size:.72rem;color:#888">Muestra el ícono 🤖 en toda la app, siempre visible</div>
+function _asesorDatos(g, combo) {
+  const clabels = ['', 'Excelente', 'Regular', 'Mala conducta', 'Muy grave'];
+  return combo.alumnos.slice().sort((a, b) => a.name.localeCompare(b.name, 'es')).map(s => {
+    const cal = [], ne = [], falt = [];
+    (g.activities || []).forEach(a => {
+      const r = _asesorValorAct((g.grades || {})[s.id + '_' + a.id]);
+      if (r.tipo === 'calificada') cal.push({ act: a.name, txt: r.txt });
+      else if (r.tipo === 'ne') ne.push(a.name);
+      else falt.push(r.nota ? `${a.name} (${r.nota})` : a.name);
+    });
+    const cd = (g.conduct || {})[s.id] || {};
+    const lev = cd.level || 0;
+    const inc = cd.incidents || [];
+    const conducta = (lev >= 2 || inc.length) ? { nivel: clabels[lev] || 'Con reportes', lev, incidentes: inc } : null;
+    const avg = calcAvg(g, s.id);
+    return { s, cal, ne, falt, conducta, avg, conPendientes: !!(ne.length || falt.length || conducta) };
+  });
+}
+
+function _asesorContexto() {
+  const g = currentGroup(); if (!g) return null;
+  const combos = _asesorGrupos(g);
+  if (!combos.length) return null;
+  if (_asesorUI.key === null || !combos.find(c => c.key === _asesorUI.key)) _asesorUI.key = combos[0].key;
+  const combo = combos.find(c => c.key === _asesorUI.key);
+  let filas = _asesorDatos(g, combo);
+  const total = filas.length;
+  if (_asesorUI.solo) filas = filas.filter(f => f.conPendientes);
+  const cfg = (typeof _infGetConfig === 'function') ? _infGetConfig() : {};
+  const info = _asesorGetInfo(combo.key);
+  return { g, combos, combo, filas, total, cfg, info };
+}
+
+// ── HTML del reporte (vista previa e impresión) ──
+const _ASESOR_CSS = `
+  .asr{font-family:Arial,sans-serif;color:#1a1a2e;font-size:10pt}
+  .asr h1{font-size:14pt;margin:0 0 2px}
+  .asr .sub{font-size:9pt;color:#555;margin-bottom:10px;line-height:1.5}
+  .asr table{width:100%;border-collapse:collapse}
+  .asr th{background:#1a1a2e;color:white;padding:6px 7px;font-size:8pt;text-transform:uppercase;text-align:left}
+  .asr td{border:1px solid #ddd;padding:6px 7px;vertical-align:top;font-size:9pt}
+  .asr tr:nth-child(even) td{background:#faf8f4}
+  .asr th,.asr td{position:static!important;left:auto!important;top:auto!important;box-shadow:none!important;z-index:auto!important}
+  .asr tbody td{background:white!important}.asr tbody tr:nth-child(even) td{background:#faf8f4!important}
+  .asr thead th{background:#1a1a2e!important}
+  .asr .c{text-align:center}
+  .asr .ok{color:#155724}.asr .ne{color:#721c24;font-weight:700}.asr .fa{color:#7a5a00;font-weight:700}.asr .cd{color:#a83020}
+  .asr .muted{color:#bbb}
+  .asr .prom{display:inline-block;padding:2px 9px;border-radius:12px;font-weight:800}
+  .asr .firmas{display:flex;gap:40px;margin-top:40px}
+  .asr .firma{flex:1;border-top:1.5px solid #1a1a2e;text-align:center;font-size:8.5pt;padding-top:4px}
+`;
+
+function _asesorHTML(ctx) {
+  const { g, combo, filas, total, cfg, info } = ctx;
+  const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+  const promColor = v => v === null ? '#eee;color:#aaa' : v >= 9 ? '#d4edda;color:#155724' : v >= 7 ? '#cce5ff;color:#004085' : v >= 6 ? '#fff3cd;color:#856404' : '#f8d7da;color:#721c24';
+  const rows = filas.map((f, i) => `
+    <tr>
+      <td class="c">${i + 1}</td>
+      <td><strong>${escHtml(f.s.name)}</strong></td>
+      <td class="c"><span class="prom" style="background:${promColor(f.avg)}">${f.avg !== null ? formatStudentAvg(f.avg) : '—'}</span></td>
+      <td>${f.cal.length ? f.cal.map(c => `<span class="ok">${escHtml(c.act)}: <b>${escHtml(c.txt)}</b></span>`).join('<br>') : '<span class="muted">—</span>'}</td>
+      <td>${f.ne.length ? f.ne.map(n => `<span class="ne">${escHtml(n)}</span>`).join('<br>') : '<span class="muted">—</span>'}</td>
+      <td>${f.falt.length ? f.falt.map(n => `<span class="fa">${escHtml(n)}</span>`).join('<br>') : '<span class="muted">—</span>'}</td>
+      <td>${f.conducta ? `<span class="cd"><b>${escHtml(f.conducta.nivel)}</b>${f.conducta.incidentes.map(x => `<br>• ${escHtml(x.date || '')}: ${escHtml(x.text || '')}`).join('')}</span>` : '<span class="muted">Sin reportes</span>'}</td>
+    </tr>`).join('');
+  return `<div class="asr">
+    <h1>📋 Reporte para el Asesor de Grupo — ${escHtml(_asesorEtiqueta(combo))}</h1>
+    <div class="sub">
+      ${cfg.escuela ? escHtml(cfg.escuela) + '<br>' : ''}
+      Asignatura: <b>${escHtml(g.subject || g.name)}</b> · Clase: <b>${escHtml(g.name)}</b>${g.trimestre ? ` · <b>${_trimLabel(g.trimestre)}</b>` : ''}<br>
+      ${[cfg.docente ? `Docente: <b>${escHtml(cfg.docente)}</b>` : '', info.nombre ? `Asesor(a): <b>${escHtml(info.nombre)}</b>` : '', `Fecha: ${fecha}`].filter(Boolean).join(' · ')}<br>
+      ${_asesorUI.solo ? `Alumnos con pendientes o reportes: <b>${filas.length}</b> de ${total}` : `Alumnos: <b>${total}</b>`} · Actividades registradas: <b>${(g.activities || []).length}</b>
+    </div>
+    <table>
+      <thead><tr>
+        <th class="c" style="width:26px">#</th><th style="min-width:150px">Alumno</th><th class="c" style="width:60px">Promedio actual</th>
+        <th>Calificaciones</th><th>No entregadas</th><th>Faltantes (sin registro)</th><th>Conducta</th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="c muted" style="padding:20px">Ningún alumno tiene pendientes ni reportes de conducta 🎉</td></tr>'}</tbody>
+    </table>
+    <div class="firmas"><div class="firma">${escHtml(cfg.docente || 'Docente')}<br>Nombre y firma del docente</div><div class="firma">${escHtml(info.nombre || 'Asesor(a)')}<br>Recibí — Asesor(a) de grupo</div></div>
+  </div>`;
+}
+
+// ── Texto para WhatsApp ──
+function _asesorTexto(ctx) {
+  const { g, combo, filas, total, info, cfg } = ctx;
+  const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  let t = `📋 *REPORTE PARA ASESOR DE GRUPO*\n`;
+  if (info.nombre) t += `Para: ${info.nombre}\n`;
+  t += `Grupo: *${_asesorEtiqueta(combo)}*\n`;
+  t += `Asignatura: ${g.subject || g.name}${g.trimestre ? ' · ' + _trimLabel(g.trimestre) : ''}\n`;
+  if (cfg.docente) t += `Docente: ${cfg.docente}\n`;
+  t += `Fecha: ${fecha}\n`;
+  if (_asesorUI.solo) t += `Alumnos con pendientes o reportes: ${filas.length} de ${total}\n`;
+  t += `\n`;
+  if (!filas.length) t += `✅ Ningún alumno tiene pendientes ni reportes de conducta.\n`;
+  filas.forEach((f, i) => {
+    t += `*${i + 1}. ${f.s.name}* — Promedio actual: ${f.avg !== null ? formatStudentAvg(f.avg) : '—'}\n`;
+    if (f.cal.length) t += `✅ Calificadas: ${f.cal.map(c => `${c.act}: ${c.txt}`).join(', ')}\n`;
+    if (f.ne.length) t += `❌ No entregadas: ${f.ne.join(', ')}\n`;
+    if (f.falt.length) t += `⚠️ Faltantes: ${f.falt.join(', ')}\n`;
+    if (f.conducta) {
+      t += `🚨 Conducta: ${f.conducta.nivel}\n`;
+      f.conducta.incidentes.forEach(x => { t += `   • ${x.date || ''}: ${x.text || ''}\n`; });
+    }
+    if (!f.ne.length && !f.falt.length && !f.conducta) t += `👍 Sin pendientes\n`;
+    t += `\n`;
+  });
+  return t.trim();
+}
+
+function _asesorNormalizarTel(tel) {
+  let d = String(tel || '').replace(/\D/g, '');
+  if (d.length === 10) d = '52' + d;          // número mexicano a 10 dígitos
+  return d;
+}
+
+// ── Modal ──
+function abrirReporteAsesor() {
+  const g = currentGroup();
+  if (!g) { showToast('Selecciona un grupo primero', 'error'); return; }
+  if (!(g.students || []).some(s => !s.inactive)) { showToast('Este grupo no tiene alumnos activos', 'error'); return; }
+  _asesorRender();
+}
+
+function _asesorRender() {
+  const ctx = _asesorContexto(); if (!ctx) return;
+  const { combos, combo, info } = ctx;
+  let modal = document.getElementById('asesorModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'asesorModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(26,26,46,0.55);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(2px)';
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:white;border-radius:14px;width:900px;max-width:97vw;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,0.28);overflow:hidden">
+      <div style="background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:1.15rem;color:white">📋 Reporte para el Asesor de Grupo</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:2px">${escHtml(ctx.g.name)}${ctx.g.trimestre ? ' · ' + _trimLabel(ctx.g.trimestre) : ''}</div>
+        </div>
+        <button onclick="document.getElementById('asesorModal').remove()" style="background:rgba(255,255,255,0.12);border:1.5px solid rgba(255,255,255,0.3);color:white;border-radius:7px;padding:6px 12px;cursor:pointer;font-family:inherit">✕</button>
       </div>
-      <label class="ia-toggle">
-        <input type="checkbox" id="iaEnabledToggle" ${IA.enabled?'checked':''} onchange="iaSetEnabled(this.checked)">
-        <span class="ia-tk-bg" style="background:${IA.enabled?'var(--green)':'#ccc'}" onclick="document.getElementById('iaEnabledToggle').click()"></span>
-        <span class="ia-tk-dot" style="left:${IA.enabled?'23px':'3px'}"></span>
-      </label>
-    </div>
-
-    <div class="form-row"><label>Clave gratuita de Groq (acceso a Llama y otros modelos)</label>
-      <input type="password" id="iaApiKeyInput" value="${escHtml(IA.apiKey)}" placeholder="Pega aquí tu clave de console.groq.com (empieza con gsk_...)">
-    </div>
-    <div class="form-row"><label>Modelo</label>
-      <select id="iaModelSelect">
-        <option value="openai/gpt-oss-120b" ${IA.model==='openai/gpt-oss-120b'?'selected':''}>GPT-OSS 120B (recomendado — más capaz)</option>
-        <option value="openai/gpt-oss-20b" ${IA.model==='openai/gpt-oss-20b'?'selected':''}>GPT-OSS 20B (más rápido y ligero)</option>
-      </select>
-    </div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--cream);border-radius:8px;margin:12px 0 14px">
-      <div><strong style="font-size:.88rem">🔊 Leer respuestas en voz alta</strong></div>
-      <label class="ia-toggle">
-        <input type="checkbox" id="iaVoiceToggle" ${IA.voice?'checked':''} onchange="iaSetVoice(this.checked)">
-        <span class="ia-tk-bg" style="background:${IA.voice?'var(--green)':'#ccc'}" onclick="document.getElementById('iaVoiceToggle').click()"></span>
-        <span class="ia-tk-dot" style="left:${IA.voice?'23px':'3px'}"></span>
-      </label>
-    </div>
-
-    <button onclick="iaSaveKey()"
-      style="padding:9px 20px;background:var(--accent);color:white;border:none;border-radius:7px;
-             font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">
-      💾 Guardar
-    </button>
-    <span style="margin-left:10px;font-size:.78rem;color:${hasKey?'var(--green)':'#c88'}">
-      ${hasKey?'✅ Clave guardada':'⚠️ Falta pegar tu clave de Groq'}
-    </span>
-
-    <div style="margin-top:16px;padding:12px 14px;background:#fff8f0;border:1.5px solid var(--conduct-border);border-radius:8px;font-size:.78rem;color:#666;line-height:1.7">
-      <strong>¿Cómo obtener tu clave gratis? (2 minutos)</strong><br>
-      1. Entra a <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> e inicia sesión (con correo o Google — no pide tarjeta).<br>
-      2. Haz clic en <em>"Create API Key"</em>.<br>
-      3. Copia la clave que empieza con <code>gsk_...</code><br>
-      4. Pégala arriba, en "Clave gratuita de Groq", y presiona <strong>💾 Guardar</strong>.<br>
-      5. El ícono aparecerá flotando — puedes arrastrarlo a donde quieras.
-    </div>
-  `;
-}
-function iaRenderSettingsUI(){
-  const el = document.getElementById('iaSettingsPanel');
-  if(el) el.innerHTML = iaSettingsHTML();
+      <div style="padding:14px 20px;border-bottom:1.5px solid var(--border);background:var(--cream)">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:6px">1. Elige el grupo</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          ${combos.map(c => {
+            const act = c.key === combo.key;
+            return `<button onclick="_asesorUI.key='${c.key}';_asesorRender()" style="padding:8px 16px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:800;border:2px solid ${act ? 'var(--accent)' : 'var(--border)'};background:${act ? 'var(--accent)' : 'white'};color:${act ? 'white' : 'var(--ink)'}">${escHtml(_asesorEtiqueta(c))} <span style="font-weight:500;opacity:0.75">(${c.alumnos.length})</span></button>`;
+          }).join('')}
+        </div>
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:6px">2. Asesor(a) del grupo ${escHtml(_asesorEtiqueta(combo))} <span style="font-weight:500;text-transform:none;letter-spacing:0">— se recuerda para la próxima vez</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="asesorNombre" type="text" value="${escHtml(info.nombre || '')}" placeholder="Nombre del asesor(a)"
+            onchange="_asesorSetInfo('${combo.key}','nombre',this.value.trim());_asesorRefreshPreview()"
+            style="flex:1;min-width:180px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.88rem;outline:none">
+          <input id="asesorTel" type="tel" value="${escHtml(info.tel || '')}" placeholder="WhatsApp (10 dígitos)"
+            onchange="_asesorSetInfo('${combo.key}','tel',this.value.trim())"
+            style="width:190px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.88rem;outline:none">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" ${_asesorUI.solo ? 'checked' : ''} onchange="_asesorUI.solo=this.checked;_asesorRefreshPreview()" style="accent-color:var(--accent);width:16px;height:16px">
+            Solo alumnos con pendientes o reportes
+          </label>
+        </div>
+      </div>
+      <div style="flex:1;overflow:auto;padding:16px 20px;background:#fcfbf8">
+        <style>${_ASESOR_CSS}</style>
+        <div id="asesorPreview"></div>
+      </div>
+      <div style="padding:12px 20px;border-top:1.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;background:white">
+        <button onclick="_asesorCopiar()" style="padding:9px 16px;background:var(--cream);color:var(--ink);border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">📄 Copiar texto</button>
+        <button onclick="_asesorImprimir()" style="padding:9px 18px;background:var(--ink);color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+        <button onclick="_asesorWhatsApp()" style="padding:9px 20px;background:#25D366;color:white;border:none;border-radius:7px;font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer">💬 Enviar por WhatsApp</button>
+      </div>
+    </div>`;
+  _asesorRefreshPreview();
 }
 
-// ── Ventana flotante: arrastrar, minimizar, abrir ──
-let iaDrag = { active:false, offsetX:0, offsetY:0, moved:false };
-
-function iaStartDrag(e){
-  const widget = document.getElementById('iaWidget');
-  if(!widget) return;
-  const rect = widget.getBoundingClientRect();
-  const point = e.touches ? e.touches[0] : e;
-  iaDrag.active = true;
-  iaDrag.moved = false;
-  iaDrag.offsetX = point.clientX - rect.left;
-  iaDrag.offsetY = point.clientY - rect.top;
-  document.addEventListener('mousemove', iaOnDrag);
-  document.addEventListener('mouseup', iaStopDrag);
-  document.addEventListener('touchmove', iaOnDrag, {passive:false});
-  document.addEventListener('touchend', iaStopDrag);
-}
-function iaOnDrag(e){
-  if(!iaDrag.active) return;
-  const widget = document.getElementById('iaWidget');
-  if(!widget) return;
-  const point = e.touches ? e.touches[0] : e;
-  const dx = Math.abs((point.clientX) - (iaDrag._lastX||point.clientX));
-  iaDrag._lastX = point.clientX;
-  iaDrag.moved = true;
-  let x = point.clientX - iaDrag.offsetX;
-  let y = point.clientY - iaDrag.offsetY;
-  const w = widget.offsetWidth, h = widget.offsetHeight;
-  x = Math.max(4, Math.min(window.innerWidth - w - 4, x));
-  y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
-  widget.style.left = x + 'px';
-  widget.style.top = y + 'px';
-  widget.style.right = 'auto';
-  widget.style.bottom = 'auto';
-  if(e.cancelable) e.preventDefault();
-}
-function iaStopDrag(){
-  if(!iaDrag.active) return;
-  iaDrag.active = false;
-  document.removeEventListener('mousemove', iaOnDrag);
-  document.removeEventListener('mouseup', iaStopDrag);
-  document.removeEventListener('touchmove', iaOnDrag);
-  document.removeEventListener('touchend', iaStopDrag);
-  iaSavePosition();
-}
-function iaSavePosition(){
-  const widget = document.getElementById('iaWidget');
-  if(!widget) return;
-  try{
-    localStorage.setItem(IA_POS_KEY, JSON.stringify({ left: widget.style.left, top: widget.style.top }));
-  }catch(e){}
-}
-function iaOpenWindow(e){
-  if(iaDrag.moved){ iaDrag.moved = false; return; }
-  document.getElementById('iaBubble').style.display = 'none';
-  document.getElementById('iaWindow').classList.remove('ia-hidden');
-  const input = document.getElementById('iaInput');
-  if(input) setTimeout(()=>input.focus(), 50);
-}
-function iaMinimize(){
-  document.getElementById('iaWindow').classList.add('ia-hidden');
-  document.getElementById('iaBubble').style.display = 'flex';
+function _asesorRefreshPreview() {
+  const el = document.getElementById('asesorPreview'); if (!el) return;
+  const ctx = _asesorContexto(); if (!ctx) return;
+  el.innerHTML = _asesorHTML(ctx);
 }
 
-// ── Construir el contexto real de las calificaciones para la IA ──
-function iaBuildContext(){
-  try{
-    const clabels = ['','Excelente','Regular','Mala conducta','Muy grave'];
-    const asistData = data.asistencia || {};
-    let groups = (data.groups||[]).map(g=>{
-      // Resumen de asistencia por alumno (recorre todas las fechas registradas de este grupo)
-      const asistCount = {};
-      Object.keys(asistData).forEach(key=>{
-        if(key.indexOf(g.id+'_') !== 0) return;
-        const rec = asistData[key] || {};
-        Object.keys(rec).forEach(sid=>{
-          if(sid.indexOf('_motivo') !== -1) return;
-          const estado = rec[sid];
-          if(!asistCount[sid]) asistCount[sid] = {presente:0, ausente:0, tarde:0};
-          if(asistCount[sid][estado] != null) asistCount[sid][estado]++;
-        });
-      });
-
-      const alumnos = (g.students||[]).filter(s=>!s.inactive).map(s=>{
-        const avg = calcAvg(g, s.id);
-        const cond = (g.conduct && g.conduct[s.id]) || null;
-        // Solo los 2 incidentes más recientes — el historial completo de
-        // conducta de todos los alumnos era la parte más pesada del contexto.
-        const incidentes = (cond && cond.incidents) ? cond.incidents.slice(-2).map(i=>({fecha:i.date, nota:i.text})) : [];
-        // Cuenta de tareas pendientes (no el detalle de cada actividad —
-        // eso multiplicaba el tamaño por el número de actividades).
-        const tareasPendientes = (g.activities||[]).filter(a=>{
-          const hw = (g.hwStatus && g.hwStatus[s.id+'_'+a.id]) || {};
-          return hw.status === 'pendiente' || !hw.status;
-        }).length;
-        const asist = asistCount[s.id] || {presente:0, ausente:0, tarde:0};
-        return {
-          nombre: s.name,
-          promedio: avg,
-          conducta: cond ? (clabels[cond.level] || null) : null,
-          incidentesConducta: incidentes,
-          tareasPendientes,
-          asistencia: asist
-        };
-      });
-      return {
-        grupo: g.name,
-        materia: g.subject || '',
-        trimestre: g.trimestre || '',
-        totalAlumnos: alumnos.length,
-        alumnos
-      };
-    });
-
-    // ── Salvaguarda de tamaño ──────────────────────────────────────────
-    // Groq rechaza (HTTP 413) solicitudes demasiado pesadas. Un docente con
-    // muchos grupos/alumnos puede generar un JSON de varios cientos de KB,
-    // así que aquí se recorta progresivamente hasta quedar dentro de un
-    // límite razonable, priorizando que el asistente siga funcionando
-    // aunque vea menos detalle en vez de fallar.
-    const LIMITE = 30000; // caracteres aprox. (deja margen bajo el límite de Groq)
-    let json = JSON.stringify(groups);
-    if (json.length > LIMITE) {
-      // 1) quitar incidentes de conducta (texto libre, suele pesar más)
-      groups = groups.map(g => ({ ...g, alumnos: g.alumnos.map(({ incidentesConducta, ...resto }) => resto) }));
-      json = JSON.stringify(groups);
-    }
-    if (json.length > LIMITE) {
-      // 2) conservar el detalle solo del grupo abierto actualmente; el resto
-      // se resume a nombre + promedio + conducta
-      const gs = data.groups || [];
-      groups = groups.map((g, i) => {
-        if (gs[i] && gs[i].id === currentGroupId) return g;
-        return { ...g, alumnos: g.alumnos.map(a => ({ nombre: a.nombre, promedio: a.promedio, conducta: a.conducta })) };
-      });
-      json = JSON.stringify(groups);
-    }
-    if (json.length > LIMITE) {
-      // 3) último recurso: recortar el texto — el modelo puede seguir
-      // usando el JSON parcial aunque quede incompleto al final.
-      json = json.slice(0, LIMITE) + '…(datos recortados por tamaño)]';
-    }
-    return json;
-  }catch(e){ console.error('iaBuildContext error', e); return '[]'; }
+function _asesorGuardarCampos() {
+  const ctx = _asesorContexto(); if (!ctx) return;
+  const n = document.getElementById('asesorNombre');
+  const t = document.getElementById('asesorTel');
+  if (n && n.value.trim() !== (ctx.info.nombre || '')) _asesorSetInfo(ctx.combo.key, 'nombre', n.value.trim());
+  if (t && t.value.trim() !== (ctx.info.tel || '')) _asesorSetInfo(ctx.combo.key, 'tel', t.value.trim());
 }
 
-// ── Chat: mensajes ──
-function iaAppendMsg(role, text){
-  const log = document.getElementById('iaLog');
-  if(!log) return null;
-  const empty = log.querySelector('.ia-empty');
-  if(empty) empty.remove();
-  const div = document.createElement('div');
-  div.className = 'ia-msg ' + role;
-  div.textContent = text;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-  return div;
+function _asesorImprimir() {
+  _asesorGuardarCampos();
+  const ctx = _asesorContexto(); if (!ctx) return;
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Permite ventanas emergentes para imprimir', 'error'); return; }
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte asesor ${escHtml(_asesorEtiqueta(ctx.combo))}</title>
+    <style>body{margin:0;padding:18px}${_ASESOR_CSS} @page{size:letter landscape;margin:10mm} @media print{.no-print{display:none}}</style></head>
+    <body>${_asesorHTML(ctx)}
+    <div class="no-print" style="text-align:center;padding:14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Imprimir</button></div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script></body></html>`);
+  win.document.close();
 }
 
-async function iaSend(){
-  if(!IA.enabled){ return; }
-  if(!IA.apiKey){
-    iaAppendMsg('bot', '⚠️ Primero configura tu clave gratuita de Groq en ⚙️ Ajustes → Asistente de IA.');
+function _asesorWhatsApp() {
+  _asesorGuardarCampos();
+  const ctx = _asesorContexto(); if (!ctx) return;
+  const texto = _asesorTexto(ctx);
+  const num = _asesorNormalizarTel(ctx.info.tel);
+  if (texto.length > 6000) {
+    showToast('⚠️ El reporte es muy largo para WhatsApp — activa "Solo alumnos con pendientes" o usa "Copiar texto"', 'error');
     return;
   }
-  const input = document.getElementById('iaInput');
-  const question = input ? input.value.trim() : '';
-  if(!question) return;
-  input.value = '';
-  iaAppendMsg('user', question);
-  const thinkingEl = iaAppendMsg('bot thinking', 'Pensando…');
-
-  const context = iaBuildContext();
-  const systemPrompt = 'Eres un asistente para un maestro que usa una app de registro de calificaciones. '
-    + 'Responde SIEMPRE en español, de forma breve, clara y directa (máximo 4-5 líneas salvo que pidan una lista). '
-    + 'Solo puedes usar la información del siguiente JSON con los grupos, alumnos, promedios, conducta, asistencia, '
-    + 'tareas pendientes y códigos QR asignados. '
-    + 'Si la pregunta no se puede responder con estos datos, dilo honestamente en vez de inventar. '
-    + 'Datos actuales:\n' + context;
-
-  try{
-    const url = 'https://api.groq.com/openai/v1/chat/completions';
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + IA.apiKey
-      },
-      body: JSON.stringify({
-        model: IA.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
-        ],
-        temperature: 0.3,
-        max_tokens: 500
-      })
-    });
-    const json = await resp.json();
-    if(thinkingEl) thinkingEl.remove();
-    if(!resp.ok){
-      const msg = (json.error && json.error.message) || json.message || ('Error ' + resp.status);
-      const isAuthError = resp.status === 401 || resp.status === 403 || /api key|unauthor|permission/i.test(msg);
-      const isModelError = resp.status === 404 || /not found|not supported|unknown model/i.test(msg);
-      const isRateLimit = resp.status === 429 || /rate limit/i.test(msg);
-      const isTooLarge = resp.status === 413 || /too large|payload/i.test(msg);
-      iaAppendMsg('bot', isAuthError
-        ? '❌ Tu clave de Groq no es válida. Revisa ⚙️ Ajustes → Asistente de IA.'
-        : isModelError
-          ? '❌ Este modelo ya no está disponible gratis en Groq. Ve a ⚙️ Ajustes → Asistente de IA y elige otro modelo, luego Guardar.'
-          : isRateLimit
-            ? '⏳ Se alcanzó el límite de uso gratuito por ahora (los modelos gratis tienen un tope por minuto/día). Intenta de nuevo en un momento.'
-            : isTooLarge
-              ? '❌ Tienes demasiados grupos/alumnos registrados para enviarlos de una vez. Intenta abrir el grupo específico sobre el que preguntas y vuelve a intentar.'
-              : '❌ ' + msg);
-      return;
-    }
-    const choice = json.choices && json.choices[0];
-    const text = (choice && choice.message && choice.message.content)
-      ? String(choice.message.content).trim()
-      : 'No obtuve una respuesta. Intenta reformular tu pregunta.';
-    iaAppendMsg('bot', text || '(respuesta vacía)');
-    if(IA.voice) iaSpeak(text);
-  }catch(err){
-    if(thinkingEl) thinkingEl.remove();
-    iaAppendMsg('bot', '❌ No se pudo conectar con la IA: ' + err.message);
-  }
+  if (!num) showToast('Sin número guardado: WhatsApp te pedirá elegir el contacto', '');
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(texto)}`, '_blank');
 }
 
-// ── Voz: texto → audio ──
-function iaSpeak(text){
-  try{
-    if(!('speechSynthesis' in window) || !text) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'es-MX';
-    u.rate = 1;
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+function _asesorCopiar() {
+  _asesorGuardarCampos();
+  const ctx = _asesorContexto(); if (!ctx) return;
+  const texto = _asesorTexto(ctx);
+  const ok = () => showToast('📄 Texto copiado — pégalo en WhatsApp o donde quieras', 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(ok).catch(() => _asesorCopiarFallback(texto, ok));
+  } else _asesorCopiarFallback(texto, ok);
 }
-
-// ── Voz: micrófono → texto (reconocimiento de voz) ──
-let iaRecognition = null;
-let iaListening = false;
-function iaToggleMic(){
-  if(iaListening){ iaStopMic(); return; }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    iaAppendMsg('bot', '⚠️ Tu navegador no soporta reconocimiento de voz. Prueba con Google Chrome.');
-    return;
-  }
-  try{
-    iaRecognition = new SR();
-    iaRecognition.lang = 'es-MX';
-    iaRecognition.interimResults = false;
-    iaRecognition.maxAlternatives = 1;
-    iaRecognition.onresult = (e)=>{
-      const text = e.results[0][0].transcript;
-      const input = document.getElementById('iaInput');
-      if(input) input.value = text;
-      iaSend();
-    };
-    iaRecognition.onerror = ()=>{ iaStopMic(); };
-    iaRecognition.onend = ()=>{ iaStopMic(); };
-    iaRecognition.start();
-    iaListening = true;
-    const btn = document.getElementById('iaMicBtn');
-    if(btn) btn.classList.add('on');
-  }catch(e){
-    iaStopMic();
-  }
-}
-function iaStopMic(){
-  if(iaRecognition){ try{ iaRecognition.stop(); }catch(e){} }
-  iaListening = false;
-  const btn = document.getElementById('iaMicBtn');
-  if(btn) btn.classList.remove('on');
-}
-
-// ── Inicialización ──
-function iaInit(){
-  iaLoadConfig();
-  const widget = document.getElementById('iaWidget');
-  if(!widget) return;
-  try{
-    const pos = JSON.parse(localStorage.getItem(IA_POS_KEY) || 'null');
-    if(pos && pos.left && pos.top){
-      widget.style.left = pos.left;
-      widget.style.top = pos.top;
-      widget.style.right = 'auto';
-      widget.style.bottom = 'auto';
-    }
-  }catch(e){}
-  const voiceBtn = document.getElementById('iaVoiceBtn');
-  if(voiceBtn) voiceBtn.textContent = IA.voice ? '🔊' : '🔇';
-  const label = document.getElementById('iaModelLabel');
-  if(label) label.textContent = IA.model;
-  const bubbleAvatar = document.getElementById('iaBubbleAvatar');
-  if(bubbleAvatar) bubbleAvatar.src = IA_AVATAR_DATA_URI;
-  const headAvatar = document.getElementById('iaHeadAvatar');
-  if(headAvatar) headAvatar.src = IA_AVATAR_DATA_URI;
-  iaApplyEnabled();
+function _asesorCopiarFallback(texto, ok) {
+  const ta = document.createElement('textarea');
+  ta.value = texto; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); ok(); } catch (e) { showToast('No se pudo copiar', 'error'); }
+  document.body.removeChild(ta);
 }
 
 // ════════════════════════════════════════════════════════════════════════
