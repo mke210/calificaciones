@@ -2955,16 +2955,16 @@ function _imprimirReporteGrupo(seccion, trimestre, grado) {
     const statusColor = a.avg === null ? '#aaa' : a.avg >= PASS ? '#155724' : '#721c24';
     const pfColor = a.promFinal === null ? '#aaa' : a.promFinal >= PASS ? '#155724' : '#721c24';
     const pfBg    = a.promFinal === null ? '#f5f5f5' : a.promFinal >= PASS ? '#d4edda' : '#f8d7da';
-    const t1Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a1 !== null ? Math.trunc(a.a1) : '—'}</td>` : '';
-    const t2Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a2 !== null ? Math.trunc(a.a2) : '—'}</td>` : '';
-    const t3Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a3 !== null ? Math.trunc(a.a3) : '—'}</td>` : '';
+    const t1Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a1 !== null ? _califFinal(a.a1) : '—'}</td>` : '';
+    const t2Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a2 !== null ? _califFinal(a.a2) : '—'}</td>` : '';
+    const t3Cell = mostrarTrims ? `<td style="padding:6px 8px;text-align:center;color:#444">${a.a3 !== null ? _califFinal(a.a3) : '—'}</td>` : '';
     return `<tr style="background:${i%2===0?'white':'#f9f7f4'}">
       <td style="padding:6px 8px;color:#aaa;font-size:0.8rem;text-align:center">${i+1}</td>
       <td style="padding:6px 12px;font-weight:500">${escHtml(a.s.name)}</td>
       <td style="padding:6px 8px;text-align:center">${gen==='M'?'H':gen==='F'?'M':'?'}</td>
       ${t1Cell}${t2Cell}${t3Cell}
-      <td style="padding:6px 8px;text-align:center;font-weight:700;background:#f0f4ff">${a.avg !== null ? Math.trunc(a.avg) : '—'}</td>
-      <td style="padding:6px 8px;text-align:center;font-weight:800;background:${pfBg};color:${pfColor}">${a.promFinal !== null ? a.promFinal.toFixed(2) : '—'}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:700;background:#f0f4ff">${a.avg !== null ? _califFinal(a.avg) : '—'}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:800;background:${pfBg};color:${pfColor}">${a.promFinal !== null ? (Math.trunc(a.promFinal*100)/100).toFixed(2) : '—'}</td>
       <td style="padding:6px 8px;text-align:center;color:${statusColor};font-weight:600;font-size:0.82rem">${status}</td>
     </tr>`;
   }).join('');
@@ -3537,7 +3537,7 @@ function renderReporteFinal(container) {
   }
   function cell(v){
     if(v===null)return`<span style="color:#ccc;font-weight:500">—</span>`;
-    return`<span style="font-weight:700;font-size:1rem;color:${colorNum(v)}">${Math.trunc(v)}</span>`;
+    return`<span style="font-weight:700;font-size:1rem;color:${colorNum(v)}">${_califFinal(v)}</span>`;
   }
   function fmtProm(v){
     if(v===null)return'—';
@@ -4677,7 +4677,7 @@ let _concUI = { hojaSel: null };
 function _concBloqueDatos(grado, letra) {
   const alumnos = _concAlumnosDeLetra(grado, letra).map(a => {
     const extra = _concGetExtra(a.name);
-    const periodos = [a.p1, a.p2, a.p3].map(v => (v !== null && v !== undefined) ? Math.trunc(v) : null);
+    const periodos = [a.p1, a.p2, a.p3].map(v => (v !== null && v !== undefined) ? _califFinal(v) : null);
     const conVal = periodos.filter(v => v !== null);
     const promFinal = conVal.length ? conVal.reduce((s, v) => s + v, 0) / conVal.length : null;
     return { name: a.name, sexo: a.sexo, periodos, promFinal, extra };
@@ -4963,9 +4963,9 @@ async function _generarConcentradoXLSX() {
         const row = ws.getRow(r);
         row.getCell(1).value = i + 1;
         row.getCell(2).value = al ? al.name : '';
-        row.getCell(3).value = (al && al.p1 !== null && al.p1 !== undefined) ? Math.trunc(al.p1) : null;
-        row.getCell(5).value = (al && al.p2 !== null && al.p2 !== undefined) ? Math.trunc(al.p2) : null;
-        row.getCell(7).value = (al && al.p3 !== null && al.p3 !== undefined) ? Math.trunc(al.p3) : null;
+        row.getCell(3).value = (al && al.p1 !== null && al.p1 !== undefined) ? _califFinal(al.p1) : null;
+        row.getCell(5).value = (al && al.p2 !== null && al.p2 !== undefined) ? _califFinal(al.p2) : null;
+        row.getCell(7).value = (al && al.p3 !== null && al.p3 !== undefined) ? _califFinal(al.p3) : null;
         const hCell = row.getCell(8);
         hCell.value = { formula: `AVERAGE(C${r},E${r},G${r})` };
         hCell.numFmt = '0.0';
@@ -5378,12 +5378,24 @@ function clearManualAvg(sid) {
   showToast('Promedio restablecido automáticamente', '');
 }
 
+// ── Regla de redondeo de la calificación (Registro y Portal deben ser iguales) ──
+// • Menos de 6 → se TRUNCA (5.0 a 5.9 = 5, reprobado).
+// • De 6 en adelante → solo sube si el decimal es MAYOR a .5:
+//   6.5 → 6, 6.6 → 7, 7.5 → 7, 7.6 → 8, 9.6 → 10.
+// El pequeño margen (1e-9) evita errores de punto flotante (ej. 6.4999999 vs 6.5).
+function _califFinal(v){
+  if(v===null||v===undefined||isNaN(v)) return null;
+  v = Number(v);
+  if(v + 1e-9 < 6) return Math.floor(v + 1e-9);
+  const ent = Math.floor(v + 1e-9);
+  return (v - ent > 0.5 + 1e-9) ? ent + 1 : ent;
+}
 function calcAvg(g,sid){
   const stu = g.students.find(s=>s.id===sid);
   if (stu && stu.inactive) return null;
   // Si hay promedio manual, usarlo
   if (!g.manualAvg) g.manualAvg = {};
-  if (g.manualAvg[sid] !== undefined && g.manualAvg[sid] !== '') return Math.trunc(parseFloat(g.manualAvg[sid]));
+  if (g.manualAvg[sid] !== undefined && g.manualAvg[sid] !== '') return _califFinal(parseFloat(g.manualAvg[sid]));
   let s=0,n=0;
   const totalActivities = g.activities.length;
   if(totalActivities===0) return null;
@@ -5399,17 +5411,17 @@ function calcAvg(g,sid){
       const f=parseFloat(v); if(!isNaN(f)){s+=f;n++;}
     }
   });
-  return n>0 ? Math.trunc(s/totalActivities) : null;
+  return n>0 ? _califFinal(s/totalActivities) : null;
 }
-// Calificación final como entero
+// Calificación final como entero (ver _califFinal)
 function truncateAvg(avg){
   if(avg===null) return null;
-  return Math.trunc(avg);
+  return _califFinal(avg);
 }
 function roundStudentAvg(avg){ return truncateAvg(avg); }
 function formatStudentAvg(avg){
   if(avg===null) return '-';
-  return String(Math.trunc(avg));
+  return String(_califFinal(avg));
 }
 function gradeClass(avg){if(avg>=9)return'grade-A';if(avg>=7)return'grade-B';if(avg>=6)return'grade-C';return'grade-D';}
 
