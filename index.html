@@ -6277,10 +6277,14 @@ setInterval(() => {
 // MÓDULO ASISTENCIA + QR EXTERNO
 // ════════════════════════════════════════════════════════════════════
 
+// Fecha de HOY en hora local (México). Antes se usaba toISOString(), que da la
+// fecha en UTC: después de las 6 pm ya marcaba "mañana" y no coincidía con la
+// fecha que usa la tablet (Asistencia QR), así que no se veían sus marcas.
+function _hoyLocal(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 let _asist = {
   records:{}, scanStream:null, scanAnim:null, scanActive:false,
   lastScan:null, lastScanTs:0, camMode:true,
-  fecha: new Date().toISOString().slice(0,10),
+  fecha: _hoyLocal(),
   ultimaSync: null,
 };
 // Cuando true, el próximo renderAsistenciaTab() NO debe auto-iniciar la
@@ -6291,7 +6295,7 @@ let _asist = {
 let _asistAutoCamSkip = false;
 function _asistKey(gid,f){return gid+'_'+f;}
 function _saveAsist(){data.asistencia=_asist.records;localStorage.setItem('regCalif_v3',JSON.stringify(data));}
-function _loadAsist(){if(!data.asistencia)data.asistencia={};_asist.records=data.asistencia;}
+function _loadAsist(){if(!data.asistencia)data.asistencia={};if(!_asist._traducido){_asist._traducido=true;_asistTraducirIds(data.asistencia);}_asist.records=data.asistencia;}
 
 // ── Asistencia: cada marca se sube DIRECTO a Firebase en su propia ruta ──
 // asistencia/{grupo_fecha}/{alumno} — así dos dispositivos pueden marcar al
@@ -6333,6 +6337,45 @@ function _asistFlush(){
   });
 }
 // Encima de lo que viene de la nube, aplica las marcas locales que aún no suben
+
+// ── Traducción de IDs de alumno entre trimestres ──
+// Cada trimestre guarda su PROPIA copia del alumno (con otro id interno). La
+// tablet (Asistencia QR) escribía la asistencia con el id del alumno de UN
+// trimestre en las claves de TODOS los trimestres, así que al ver otro
+// trimestre el Registro no encontraba al alumno y la marca "no llegaba".
+// Aquí, sin tocar la nube, cada marca con un id ajeno se traduce al id del
+// alumno correspondiente del grupo de esa clave (por código QR o por nombre).
+function _asistTraducirIds(asis){
+  if(!asis || !data || !Array.isArray(data.groups)) return asis;
+  const qrN = s => s && s.qrCode ? String(s.qrCode).trim().toUpperCase() : '';
+  const nmN = s => String((s&&s.name)||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+  const porId = {}, grupoPorId = {};
+  data.groups.forEach(g => { grupoPorId[g.id] = g; (g.students||[]).forEach(st => { porId[st.id] = st; }); });
+  const idxCache = {};
+  const indiceGrupo = g => {
+    if (idxCache[g.id]) return idxCache[g.id];
+    const ids = new Set(), qr = {}, nm = {};
+    (g.students||[]).forEach(st => { ids.add(st.id); const q=qrN(st); if(q) qr[q]=st.id; nm[nmN(st)]=st.id; });
+    return idxCache[g.id] = { ids, qr, nm };
+  };
+  Object.keys(asis).forEach(key => {
+    const rec = asis[key];
+    if (!rec || typeof rec !== 'object' || key.length < 12) return;
+    const g = grupoPorId[key.slice(0, key.length - 11)];   // clave = {grupoId}_{AAAA-MM-DD}
+    if (!g) return;
+    const ix = indiceGrupo(g);
+    Object.keys(rec).forEach(sid => {
+      if (sid.endsWith('_motivo') || ix.ids.has(sid)) return;
+      const otro = porId[sid]; if (!otro) return;
+      const q = qrN(otro);
+      const destino = (q && ix.qr[q]) || ix.nm[nmN(otro)];
+      if (!destino || rec[destino] !== undefined) return;   // la marca propia tiene prioridad
+      rec[destino] = rec[sid];
+      if (rec[sid + '_motivo'] !== undefined && rec[destino + '_motivo'] === undefined) rec[destino + '_motivo'] = rec[sid + '_motivo'];
+    });
+  });
+  return asis;
+}
 function _asistAplicarPendientes(remoto){
   const res = remoto || {};
   const pend = _asistPendLoad();
@@ -7449,7 +7492,7 @@ function exportarAsistencia(){
   const modal=document.createElement('div');
   modal.id='exportAsistModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(26,26,46,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);padding:16px';
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=_hoyLocal();
   const mesDefault = hoy.slice(0,7);
   const anioDefault = hoy.slice(0,4);
   const rango = todFechas.length ? `Registros guardados: ${todFechas[0]} al ${todFechas[todFechas.length-1]}` : 'Aún no hay registros guardados en este grupo';
@@ -8280,7 +8323,7 @@ function _fbConectarBaseDatos() {
         });
         if (Object.keys(extra).length) { const p = _asistPendLoad(); Object.keys(extra).forEach(x => { if (!(x in p)) p[x] = extra[x]; }); _asistPendSave(p); }
       }
-      data.asistencia = _asistAplicarPendientes(remoto);
+      data.asistencia = _asistTraducirIds(_asistAplicarPendientes(remoto));
       _asistFlush();
       _asist.records = data.asistencia;
       _asist.ultimaSync = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -8472,7 +8515,7 @@ function _fbAplicarRemoto(remote) {
 
     // Guardar localmente
     data = { ...remoteData };
-    data.asistencia = _asistAplicarPendientes(data.asistencia || {});
+    data.asistencia = _asistTraducirIds(_asistAplicarPendientes(data.asistencia || {}));
     data._savedAt = _savedAt || Date.now();
     data._lastKnownRemoteAt = data._savedAt; // ya sabemos qué hay en la nube ahora
     _migrateGroups();
@@ -8510,7 +8553,7 @@ function fbSincronizacionForzada() {
     localStorage.removeItem('regCalif_v3');
     const { _savedBy, _savedAt, _version, alumnosUnicos: _indiceIgnorado, ...remoteData } = remote;
     data = { ...remoteData };
-    data.asistencia = _asistAplicarPendientes(data.asistencia || {});
+    data.asistencia = _asistTraducirIds(_asistAplicarPendientes(data.asistencia || {}));
     data._savedAt = _savedAt || Date.now();
     _migrateGroups();
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
