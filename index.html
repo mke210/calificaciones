@@ -1548,7 +1548,7 @@ function saveAll() {
   const fbOk = (typeof fbGuardar === 'function') && fbGuardar();
 
   if (!fbOk) {
-    showToast('💾 Guardado correctamente', 'success');
+    showToast('💾 Guardado SOLO en este equipo — no hay conexión con Firebase (' + ((typeof FB!=='undefined' && FB._statusMsg) || 'sin conexión') + '). Se subirá al reconectar.', 'error');
     _markDirty(); // sin nube todavía
   } else {
     showToast('💾 Guardado · ☁️ Subiendo a Firebase…', 'success');
@@ -8315,7 +8315,25 @@ function _fbConectarBaseDatos() {
       // Solo aplicar si el remoto es más reciente que lo local
       const localTs  = data._savedAt  || 0;
       const remoteTs = remote._savedAt || 0;
-      if (remoteTs <= localTs) return;  // ← local es igual o más reciente, no tocar
+      if (remoteTs <= localTs) {
+        // ⚠️ OTRO equipo acaba de subir datos MÁS VIEJOS que los de aquí y
+        // reemplazó la nube (pasa con una pestaña o computadora que tenía
+        // abierta una copia vieja del Registro). Antes esto se ignoraba en
+        // silencio: aquí se seguían viendo las calificaciones al día, pero la
+        // nube — y por lo tanto el Portal — quedaba con las viejas.
+        if (remote._savedBy && remoteTs < localTs && remoteTs !== FB._ultimoAvisoViejo) {
+          FB._ultimoAvisoViejo = remoteTs;
+          console.warn('[Firebase] El equipo', remote._savedBy, 'subió datos más viejos. Se vuelven a subir los de aquí.');
+          showToast(`⚠️ El equipo "${remote._savedBy}" subió datos viejos a la nube. Volviendo a subir los tuyos…`, 'error');
+          // Se COMBINA: se conserva lo de aquí y se agrega lo que ese equipo
+          // tenga y aquí falte; luego se sube el resultado.
+          _fbFusionarRemoto(remote);
+          data._savedAt = Date.now();
+          _fbGuardarReal();
+          renderSidebar(); renderMain();
+        }
+        return;
+      }
       _fbAplicarRemoto(remote);
     });
 
@@ -8520,6 +8538,16 @@ function _fbGuardarReal() {
     data._lastKnownRemoteAt = payload._savedAt; // ya sabemos qué hay en la nube ahora
     _markClean(); // Firebase confirmó — todo está guardado
     fbRefreshUI();
+    // Comprobación: se vuelve a leer de la nube lo que se acaba de subir
+    FB.ref.child('_savedAt').once('value').then(sn => {
+      if (sn.val() === payload._savedAt) {
+        FB.ultimaVerificacion = hora;
+        showToast(`✅ Verificado en la nube · ${hora} · equipo ${FB.deviceId}`, 'success');
+      } else {
+        showToast('⚠️ La nube no tiene lo que se subió — otro equipo la reemplazó. Presiona Guardar de nuevo.', 'error');
+        _markDirty();
+      }
+    }).catch(() => {});
   }).catch(e => {
     const uid = (FB.auth && FB.auth.currentUser) ? FB.auth.currentUser.uid.slice(0,6)+'…' : 'sin sesión';
     showToast('⚠️ Firebase (auth: ' + uid + '): ' + e.message + ' — datos guardados localmente', 'error');
