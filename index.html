@@ -1248,7 +1248,7 @@ async function doLogout() {
   // Subir cambios pendientes antes de salir (si hay conexión)
   try {
     if (typeof _hasUnsyncedChanges !== 'undefined' && _hasUnsyncedChanges && FB.ref && FB.status === 'connected') {
-      await FB.ref.update({ ..._fbSinAsistencia(data), _savedBy: FB.deviceId, _savedAt: data._savedAt || Date.now(), _version: '10.15' });
+      await FB.ref.update(JSON.parse(JSON.stringify({ ..._fbSinAsistencia(data), _lastKnownRemoteAt: null, _savedBy: FB.deviceId, _savedAt: data._savedAt || Date.now(), _version: '10.15' })));
     }
   } catch (e) {}
   try { if (FB.auth) await FB.auth.signOut(); } catch (e) {}
@@ -1551,8 +1551,8 @@ function saveAll() {
     showToast('💾 Guardado correctamente', 'success');
     _markDirty(); // sin nube todavía
   } else {
-    showToast('💾 Guardado · ☁️ Sincronizado con Firebase', 'success');
-    setTimeout(_markClean, 2000); // asumir éxito tras 2s
+    showToast('💾 Guardado · ☁️ Subiendo a Firebase…', 'success');
+    _markDirty(); // se pone en verde cuando Firebase CONFIRMA (ver _fbGuardarReal)
   }
 }
 
@@ -1602,14 +1602,19 @@ function autoSave() {
 
 // ── Indicador visual de cambios pendientes ────────────────────────────────
 let _dirtyTimer = null;
-let _hasUnsyncedChanges = false; // true = hay ediciones locales reales que aún no llegaron a Firebase
+// true = hay ediciones locales reales que aún no llegaron a Firebase.
+// Se recuerda aunque cierres la app: así, al volver a abrirla, la nube no
+// pisa calificaciones que capturaste y no alcanzaron a subirse.
+let _hasUnsyncedChanges = (function(){ try { return localStorage.getItem('regCalif_dirty') === '1'; } catch(e) { return false; } })();
 function _markDirty() {
   _hasUnsyncedChanges = true;
+  try { localStorage.setItem('regCalif_dirty', '1'); } catch(e) {}
   const dot = document.getElementById('_saveDot');
   if (dot) { dot.style.background = '#f0c060'; dot.title = 'Cambios sin subir a la nube — presiona 💾 Guardar'; }
 }
 function _markClean() {
   _hasUnsyncedChanges = false;
+  try { localStorage.removeItem('regCalif_dirty'); } catch(e) {}
   const dot = document.getElementById('_saveDot');
   if (dot) { dot.style.background = '#22cc55'; dot.title = 'Todo guardado ✓'; }
   if (_dirtyTimer) { clearTimeout(_dirtyTimer); _dirtyTimer = null; }
@@ -6266,9 +6271,9 @@ setInterval(() => {
       localStorage.setItem('regCalif_v3', JSON.stringify(data));
       // Solo subir si de verdad hay cambios locales sin sincronizar
       if (_hasUnsyncedChanges && FB.status === 'connected' && FB.ref) {
-        FB.ref.update({ ..._fbSinAsistencia(data), _savedBy: FB.deviceId, _savedAt: data._savedAt, _version: '10.15' })
-          .then(() => { _markClean(); })
-          .catch(() => {}); // silencioso, no molestar al usuario
+        FB.ref.update(JSON.parse(JSON.stringify({ ..._fbSinAsistencia(data), _lastKnownRemoteAt: null, _savedBy: FB.deviceId, _savedAt: data._savedAt, _version: '10.15' })))
+          .then(() => { _markClean(); FB._avisoNubePendiente = false; })
+          .catch(e => { console.warn('[Autoguardado] no se pudo subir:', e.message); });
       }
     } catch(e) {}
   }
@@ -8293,6 +8298,20 @@ function _fbConectarBaseDatos() {
       if (!remote) return;
       // Ignorar cambios que vinieron de este mismo dispositivo
       if (remote._savedBy && remote._savedBy === FB.deviceId) return;
+      // La tablet de Asistencia QR solo marca asistencia (que ya llega por su
+      // propia escucha). Antes, cada escaneo cambiaba _savedAt y este listener
+      // REEMPLAZABA todos los datos locales con los de la nube, borrando las
+      // calificaciones recién capturadas que aún no se subían.
+      if (_fbEsSoloAsistencia(remote._savedBy)) return;
+      // Si aquí hay calificaciones sin subir, NO se pisan: se avisa y al
+      // presionar Guardar se decide qué hacer.
+      if (_hasUnsyncedChanges) {
+        if (!FB._avisoNubePendiente) {
+          FB._avisoNubePendiente = true;
+          showToast('☁️ Otro dispositivo guardó cambios. Presiona 💾 Guardar para subir los tuyos.', '');
+        }
+        return;
+      }
       // Solo aplicar si el remoto es más reciente que lo local
       const localTs  = data._savedAt  || 0;
       const remoteTs = remote._savedAt || 0;
@@ -8414,12 +8433,18 @@ function fbGuardar() {
       if (remoteTs > localBaseline) {
         FB.ref.child('_savedBy').once('value').then(snapBy => {
           const remoteBy = snapBy.val();
-          if (remoteBy && remoteBy !== FB.deviceId) {
-            const mins = Math.round((remoteTs - localBaseline) / 60000);
-            const traer = confirm(`⚠️ Hay cambios en la nube (de "${remoteBy}") de hace ${mins > 0 ? mins + ' min' : 'un momento'} que este dispositivo todavía no tiene.\n\nSi guardas ahora, esos cambios se perderían.\n\nPresiona Aceptar para TRAERLOS primero (recomendado).\nPresiona Cancelar para guardar de todos modos y sobreescribirlos.`);
-            if (traer) {
-              fbCargarDesdeNube(true, true);
-              showToast('☁️ Trajimos los cambios de la nube — revisa y vuelve a guardar', 'success');
+          if (remoteBy && remoteBy !== FB.deviceId && !_fbEsSoloAsistencia(remoteBy)) {
+            // Antes: "Aceptar" traía la nube y BORRABA lo recién capturado aquí.
+            // Ahora: "Aceptar" COMBINA — se conserva todo lo de este equipo y se
+            // agrega lo que el otro dispositivo tenga y aquí falte.
+            const combinar = confirm(`☁️ Otro dispositivo ("${remoteBy}") guardó cambios que este equipo todavía no tiene.\n\nAceptar = COMBINAR (recomendado): se conservan tus calificaciones y se agregan las del otro dispositivo.\n\nCancelar = subir SOLO lo de este equipo (lo del otro dispositivo que no esté aquí se perdería).`);
+            if (combinar) {
+              FB.ref.once('value').then(snapAll => {
+                const n = _fbFusionarRemoto(snapAll.val());
+                _fbGuardarReal();
+                renderSidebar(); renderMain();
+                showToast(`🔀 Combinado: ${n} dato${n!==1?'s':''} del otro dispositivo agregado${n!==1?'s':''} · subiendo…`, 'success');
+              }).catch(() => _fbGuardarReal());
             } else {
               _fbGuardarReal();
             }
@@ -8437,15 +8462,56 @@ function fbGuardar() {
 // La asistencia NO viaja en el guardado general: tiene su propia ruta y se
 // escribe marca por marca (ver _asistPush). Así un guardado de otro
 // dispositivo con asistencia vieja no puede borrar la de hoy.
+
+// Combina datos de la nube con los locales SIN perder nada de lo local:
+// lo que existe aquí gana; de la nube solo se agrega lo que aquí falta
+// (grupos, alumnos, actividades, calificaciones, conducta, promedios manuales).
+function _fbFusionarRemoto(remote) {
+  if (!remote || !remote.groups) return 0;
+  let n = 0;
+  const rGroups = Array.isArray(remote.groups) ? remote.groups : Object.values(remote.groups);
+  rGroups.forEach(rg => {
+    if (!rg || !rg.id) return;
+    const lg = data.groups.find(g => g.id === rg.id);
+    if (!lg) { data.groups.push(rg); n++; return; }
+    ['students', 'activities'].forEach(campo => {
+      const lista = Array.isArray(rg[campo]) ? rg[campo] : Object.values(rg[campo] || {});
+      if (!lg[campo]) lg[campo] = [];
+      lista.forEach(x => { if (x && x.id && !lg[campo].some(y => y.id === x.id)) { lg[campo].push(x); n++; } });
+    });
+    ['grades', 'conduct', 'manualAvg', 'hwStatus'].forEach(campo => {
+      const r = rg[campo] || {};
+      if (!lg[campo]) lg[campo] = {};
+      Object.keys(r).forEach(k => { if (lg[campo][k] === undefined || lg[campo][k] === '') { lg[campo][k] = r[k]; n++; } });
+    });
+  });
+  if (remote.asesores) { if (!data.asesores) data.asesores = {}; Object.keys(remote.asesores).forEach(k => { if (!data.asesores[k]) data.asesores[k] = remote.asesores[k]; }); }
+  data._savedAt = Date.now();
+  try { localStorage.setItem('regCalif_v3', JSON.stringify(data)); } catch (e) {}
+  return n;
+}
+function _fbEsSoloAsistencia(by){ return typeof by === 'string' && by.indexOf('tablet_asistencia') === 0; }
 function _fbSinAsistencia(obj){ const { asistencia, ...resto } = obj || {}; return resto; }
 function _fbGuardarReal() {
-  const payload = {
+  let payload;
+  try {
+  payload = {
     ..._fbSinAsistencia(data),
     _savedBy:  FB.deviceId,
     _savedAt:  Date.now(),
     _version:  '10.15',
     alumnosUnicos: (function(){ try { return _construirIndiceAlumnos(); } catch(e) { return []; } })(),
   };
+  delete payload._lastKnownRemoteAt;
+  // Firebase rechaza valores "undefined" (y lanzaba un error silencioso que
+  // dejaba las calificaciones sin subir). JSON los elimina.
+  payload = JSON.parse(JSON.stringify(payload));
+  } catch (e) {
+    showToast('⚠️ No se pudo preparar el guardado: ' + e.message + ' — datos guardados localmente', 'error');
+    _markDirty();
+    return;
+  }
+  FB._avisoNubePendiente = false;
   FB.ref.update(payload).then(() => {
     const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
     FB.lastSync = hora;
@@ -8490,8 +8556,12 @@ function fbCargarDesdeNube(mostrarToast = true, forzar = false) {
       // Primer uso o datos de ejemplo — tomar la nube
       _fbAplicarRemoto(remote);
       if (mostrarToast) showToast('☁️ Datos cargados desde Firebase', 'success');
+    } else if (remoteEsDeOtroDispositivo && remoteTs > localTs && !_hasUnsyncedChanges) {
+      // La nube es más reciente y aquí no hay nada sin subir: se trae sin riesgo
+      _fbAplicarRemoto(remote);
+      if (mostrarToast) showToast('☁️ Datos actualizados desde la nube', 'success');
     } else if (remoteEsDeOtroDispositivo && remoteTs > localTs) {
-      // Otro dispositivo tiene algo más reciente — PREGUNTAR antes de sobreescribir
+      // Otro dispositivo tiene algo más reciente Y aquí hay cambios sin subir — PREGUNTAR
       const mins = Math.round((remoteTs - localTs) / 60000);
       if (confirm(`☁️ Otro dispositivo (${remote._savedBy}) guardó cambios hace ${mins > 0 ? mins + ' min' : 'un momento'}.\n\n¿Deseas traer esos datos?\n\n⚠️ ATENCIÓN: tus cambios locales no subidos se perderían.\nPresiona Cancelar para conservar lo que tienes aquí.`)) {
         _fbAplicarRemoto(remote);
@@ -8519,6 +8589,7 @@ function _fbAplicarRemoto(remote) {
     data._savedAt = _savedAt || Date.now();
     data._lastKnownRemoteAt = data._savedAt; // ya sabemos qué hay en la nube ahora
     _migrateGroups();
+    _markClean(); // lo local ahora es igual a la nube
     localStorage.setItem('regCalif_v3', JSON.stringify(data));
 
     // Refrescar UI
