@@ -1808,9 +1808,80 @@ function renderTab() {
 }
 
 // ---- GRADES TAB ----
+
+// ── Alumnos entre trimestres ──────────────────────────────────────────────
+// Cada clase existe una vez por trimestre (mismo nombre). ANTES, "Agregar
+// Alumno" solo lo creaba en el trimestre que se estaba viendo, así que los
+// alumnos capturados en el 1° trimestre no aparecían en el 2° ni en el 3°.
+// Ahora se agregan en todos, y estas funciones copian a los que faltan.
+function _idAlumnoTrim(s) { return _qrNorm(s) || ('N:' + _normNombre(s.name)); }
+function _copiaAlumnoPara(s) {
+  const c = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), name: s.name };
+  ['qrCode', 'grado', 'seccion', 'grupo', 'gender', 'inactive'].forEach(k => { if (s[k] !== undefined) c[k] = s[k]; });
+  return c;
+}
+// Alumnos de trimestres ANTERIORES de la misma clase que no están en g.
+// (Solo hacia adelante: un alumno que llegó en el 2° trimestre no se agrega al 1°.)
+function _alumnosFaltantesEnTrim(g) {
+  if (!g) return [];
+  const t = parseInt(g.trimestre, 10);
+  if (!t || t < 2) return [];
+  const yaEsta = new Set((g.students || []).map(_idAlumnoTrim));
+  const faltan = [], vistos = new Set();
+  data.groups
+    .filter(x => x.name === g.name && x.id !== g.id && parseInt(x.trimestre, 10) < t)
+    .sort((a, b) => (a.trimestre || '').localeCompare(b.trimestre || ''))
+    .forEach(x => (x.students || []).forEach(s => {
+      const k = _idAlumnoTrim(s);
+      if (!yaEsta.has(k) && !vistos.has(k)) { vistos.add(k); faltan.push(s); }
+    }));
+  return faltan;
+}
+function copiarAlumnosAlTrimestre() {
+  const g = currentGroup(); if (!g) return;
+  const faltan = _alumnosFaltantesEnTrim(g);
+  if (!faltan.length) { showToast('Este trimestre ya tiene a todos los alumnos', 'success'); return; }
+  _snapshot();
+  faltan.forEach(s => g.students.push(_copiaAlumnoPara(s)));
+  // Mismo orden que en el trimestre anterior (alfabético si no hay referencia)
+  g.students.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  _guardarSinSnapshot();
+  renderSidebar(); renderMain();
+  showToast(`✅ ${faltan.length} alumno${faltan.length !== 1 ? 's' : ''} copiado${faltan.length !== 1 ? 's' : ''} al ${_trimLabel(g.trimestre)} — presiona 💾 Guardar`, 'success');
+}
+// Copia a los que falten en el 2° y 3° trimestre de TODAS las clases
+function copiarAlumnosTodasLasClases() {
+  const objetivos = data.groups.filter(g => parseInt(g.trimestre, 10) >= 2)
+    .sort((a, b) => (a.trimestre || '').localeCompare(b.trimestre || ''));
+  let total = 0, clases = 0;
+  _snapshot();
+  objetivos.forEach(g => {
+    const faltan = _alumnosFaltantesEnTrim(g);
+    if (!faltan.length) return;
+    faltan.forEach(s => g.students.push(_copiaAlumnoPara(s)));
+    g.students.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    total += faltan.length; clases++;
+  });
+  if (!total) { showToast('Todas las clases ya tienen a sus alumnos en los 3 trimestres', 'success'); return; }
+  _guardarSinSnapshot();
+  renderSidebar(); renderMain();
+  showToast(`✅ ${total} alumnos copiados en ${clases} grupo${clases !== 1 ? 's' : ''} (2° y 3° trimestre) — presiona 💾 Guardar`, 'success');
+}
+function _avisoAlumnosFaltantesHTML(g) {
+  const faltan = _alumnosFaltantesEnTrim(g);
+  if (!faltan.length) return '';
+  const total = data.groups.filter(x => parseInt(x.trimestre, 10) >= 2).reduce((n, x) => n + _alumnosFaltantesEnTrim(x).length, 0);
+  return `<div style="margin:0 0 12px;padding:12px 16px;background:#fff6e0;border:1.5px solid #e0a000;border-radius:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px;font-size:0.86rem;color:#6b4e00"><strong>⚠️ Faltan ${faltan.length} alumno${faltan.length !== 1 ? 's' : ''}</strong> que sí están en un trimestre anterior de esta clase.</div>
+    <button class="btn btn-sm" style="background:#e0a000;color:white" onclick="copiarAlumnosAlTrimestre()">📋 Copiar a este trimestre</button>
+    ${total > faltan.length ? `<button class="btn btn-sm" style="background:white;border:1.5px solid #e0a000;color:#6b4e00" onclick="copiarAlumnosTodasLasClases()">📋 Copiar en todas las clases (${total})</button>` : ''}
+  </div>`;
+}
+
 function renderGradesTab(container) {
   const g = currentGroup();
-  if (!g.students.length) { container.innerHTML = `<div class="empty"><div class="icon">👨‍🎓</div><p>Aún no hay alumnos.<br>Haz clic en <strong>+ Alumno</strong> para agregar.</p></div>`; return; }
+  const aviso = _avisoAlumnosFaltantesHTML(g);
+  if (!g.students.length) { container.innerHTML = aviso + `<div class="empty"><div class="icon">👨‍🎓</div><p>Aún no hay alumnos.<br>Haz clic en <strong>+ Alumno</strong> para agregar.</p></div>`; return; }
 
   const clabels = ['','⭐ Excelente','⚠️ Regular','🔶 Mala conducta','🔴 Muy grave'];
   const cclass  = ['','conduct-1','conduct-2','conduct-3','conduct-4'];
@@ -1902,7 +1973,7 @@ function renderGradesTab(container) {
     <button class="btn btn-danger btn-sm" onclick="openDeleteActivityModal()">🗑️ Eliminar actividad</button>
     <button class="btn btn-danger btn-sm" onclick="deleteLastActivityConfirm()">✕ Quitar última actividad</button>
   </div>`;
-  container.innerHTML = html;
+  container.innerHTML = aviso + html;
 
   // Sync horizontal scrollbar with table
   requestAnimationFrame(() => {
@@ -5869,22 +5940,29 @@ function confirmQuickAdd(type) {
     // aunque estés viendo otra clase) — se usa la instancia del mismo
     // trimestre que se está viendo actualmente.
     const gDestino = data.groups.find(x => x.name === claseDestino && x.trimestre === g.trimestre) || g;
+    // El alumno se crea en ESTE trimestre y en los SIGUIENTES de la misma
+    // clase (antes solo en el que se estaba viendo, y en el 2°/3° trimestre
+    // "no aparecían"). No se agrega a trimestres anteriores: si llegó a medio
+    // año, no debe salir en el 1° trimestre.
+    const tActual = parseInt(gDestino.trimestre, 10) || 0;
+    const destinos = data.groups.filter(x => x.name === claseDestino &&
+      (x === gDestino || (tActual && (parseInt(x.trimestre, 10) || 0) > tActual)));
     names.forEach(n => {
       const code = genAlumnoId(usedCodes);
       usedCodes.add(code);
       const gender = sexoElegido === 'M' || sexoElegido === 'F' ? sexoElegido : _detectarGenero(n, null);
-      gDestino.students.push({
+      destinos.forEach(gx => gx.students.push({
         id: Date.now().toString(36)+Math.random().toString(36).slice(2),
         name: n, qrCode: code,
         grado: gradoElegido,
         seccion: grupoElegido,
         grupo: grupoElegido, // mirror por compatibilidad
         gender
-      });
+      }));
     });
     closeQuickModal();
     currentTab = 'calificaciones'; renderMain();
-    showToast(names.length===1 ? `✅ Alumno agregado: ${names[0]}` : `✅ ${names.length} alumnos agregados`, 'success');
+    showToast((names.length===1 ? `✅ Alumno agregado: ${names[0]}` : `✅ ${names.length} alumnos agregados`) + (destinos.length>1 ? ` (en ${destinos.length} trimestres)` : ''), 'success');
   } else {
     const ahora = new Date().toISOString();
     names.forEach(n => g.activities.push({
@@ -5896,7 +5974,9 @@ function confirmQuickAdd(type) {
     currentTab = 'calificaciones'; renderMain();
     showToast(names.length===1 ? `✅ Actividad agregada: ${names[0]}` : `✅ ${names.length} actividades agregadas`, 'success');
   }
-  localStorage.setItem('regCalif_v3', JSON.stringify(data));
+  // Antes solo se guardaba en este navegador (sin marcar para subir a la nube):
+  // los alumnos/actividades nuevos podían no llegar nunca a Firebase.
+  _guardarSinSnapshot();
 }
 function toggleStudentActive(id) {
   const g = currentGroup();
